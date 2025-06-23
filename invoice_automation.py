@@ -28,6 +28,7 @@ invoicer.set_customer_hourly_rate("cus_DEF456", 125.00)  # $125/hour for standar
 
 import stripe
 import os
+import argparse
 from datetime import datetime, timedelta
 from dateutil import parser
 from google.auth.transport.requests import Request
@@ -576,13 +577,22 @@ class StripeCalendarInvoicer:
 def main():
     """Main function to run the automation"""
     
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Stripe Customer Meeting Invoice Automation')
+    parser.add_argument('--days-back', '-d', type=int, 
+                        help='Number of days back to check for meetings (overrides environment variable)')
+    parser.add_argument('--hourly-rate', '-r', type=float,
+                        help='Default hourly rate (overrides environment variable)')
+    
+    args = parser.parse_args()
+    
     # Load environment variables from .env file
     load_dotenv()
     
-    # Configuration - loads from environment variables with defaults
+    # Configuration - loads from environment variables with defaults, can be overridden by command line
     STRIPE_API_KEY = os.getenv('STRIPE_SECRET_KEY')
-    DAYS_BACK = int(os.getenv('DAYS_BACK', '7'))  # Default to 7 days
-    DEFAULT_HOURLY_RATE = float(os.getenv('DEFAULT_HOURLY_RATE', '250.00'))  # Default to $250/hour
+    DAYS_BACK = args.days_back if args.days_back is not None else int(os.getenv('DAYS_BACK', '7'))
+    DEFAULT_HOURLY_RATE = args.hourly_rate if args.hourly_rate is not None else float(os.getenv('DEFAULT_HOURLY_RATE', '250.00'))
     
     if not STRIPE_API_KEY:
         logger.error("Please set STRIPE_SECRET_KEY environment variable in your .env file")

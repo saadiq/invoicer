@@ -174,7 +174,10 @@ Thumbs.db
 config.ini
 secrets.json
 .secrets
+
+# Google Calendar OAuth files
 credentials.json
+token.json
 
 # Logs
 *.log
