@@ -112,14 +112,14 @@ class StripeCalendarInvoicer:
         invoices = self.get_customer_invoices(customer_id)
         
         for invoice in invoices:
-            # Check line items for this meeting ID
-            line_items = stripe.InvoiceLineItem.list(invoice=invoice.id, limit=100)
-            for item in line_items.data:
-                if meeting_id in (item.description or ""):
-                    if invoice.status == 'draft':
-                        return 'drafted'
-                    elif invoice.status in ['open', 'paid', 'uncollectible']:
-                        return 'sent'
+            # Check line items for this meeting ID - line items are in the lines property
+            if hasattr(invoice, 'lines') and invoice.lines:
+                for item in invoice.lines.data:
+                    if meeting_id in (item.description or ""):
+                        if invoice.status == 'draft':
+                            return 'drafted'
+                        elif invoice.status in ['open', 'paid', 'uncollectible']:
+                            return 'sent'
         
         return 'not_invoiced'
     
