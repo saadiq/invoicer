@@ -306,45 +306,53 @@ class StripeCalendarInvoicer:
     
     def display_meetings_interactive(self, customers_with_meetings, default_hourly_rate):
         """Interactive session to select meetings and enter synopses"""
-        print("\n" + "="*80)
-        print("CUSTOMER MEETINGS - INVOICE SELECTION")
-        print("="*80)
         
-        # Display all meetings with status
-        meeting_index = 0
-        meeting_map = {}  # Map index to (customer_id, meeting_index)
+        def display_meeting_list():
+            """Helper function to display the current meeting list with selection status"""
+            print("\n" + "="*80)
+            print("CUSTOMER MEETINGS - INVOICE SELECTION")
+            print("="*80)
+            
+            # Display all meetings with status
+            meeting_index = 0
+            meeting_map = {}  # Map index to (customer_id, meeting_index)
+            
+            for customer_id, data in customers_with_meetings.items():
+                customer = data['customer']
+                hourly_rate = self.get_customer_hourly_rate(customer, default_hourly_rate)
+                
+                print(f"\n📧 {customer['name']} ({customer['email']}) - ${hourly_rate}/hour")
+                print("-" * 60)
+                
+                for i, meeting in enumerate(data['meetings']):
+                    meeting_index += 1
+                    meeting_map[meeting_index] = (customer_id, i)
+                    
+                    # Status symbols
+                    status_symbol = {
+                        'not_invoiced': '⭕',
+                        'drafted': '📄',
+                        'sent': '✅'
+                    }[meeting['invoice_status']]
+                    
+                    status_text = {
+                        'not_invoiced': 'Not invoiced',
+                        'drafted': 'Draft created',
+                        'sent': 'Invoice sent'
+                    }[meeting['invoice_status']]
+                    
+                    selected_symbol = '[✓]' if meeting['selected'] else '[ ]'
+                    amount = meeting['duration'] * hourly_rate
+                    
+                    print(f"{meeting_index:2}. {selected_symbol} {status_symbol} {meeting['summary']}")
+                    print(f"    📅 {meeting['date']} at {meeting['time']} ({meeting['duration']}h) - ${amount:.2f}")
+                    print(f"    📊 Status: {status_text}")
+                    print()
+            
+            return meeting_map
         
-        for customer_id, data in customers_with_meetings.items():
-            customer = data['customer']
-            hourly_rate = self.get_customer_hourly_rate(customer, default_hourly_rate)
-            
-            print(f"\n📧 {customer['name']} ({customer['email']}) - ${hourly_rate}/hour")
-            print("-" * 60)
-            
-            for i, meeting in enumerate(data['meetings']):
-                meeting_index += 1
-                meeting_map[meeting_index] = (customer_id, i)
-                
-                # Status symbols
-                status_symbol = {
-                    'not_invoiced': '⭕',
-                    'drafted': '📄',
-                    'sent': '✅'
-                }[meeting['invoice_status']]
-                
-                status_text = {
-                    'not_invoiced': 'Not invoiced',
-                    'drafted': 'Draft created',
-                    'sent': 'Invoice sent'
-                }[meeting['invoice_status']]
-                
-                selected_symbol = '[✓]' if meeting['selected'] else '[ ]'
-                amount = meeting['duration'] * hourly_rate
-                
-                print(f"{meeting_index:2}. {selected_symbol} {status_symbol} {meeting['summary']}")
-                print(f"    📅 {meeting['date']} at {meeting['time']} ({meeting['duration']}h) - ${amount:.2f}")
-                print(f"    📊 Status: {status_text}")
-                print()
+        # Initial display
+        meeting_map = display_meeting_list()
         
         # Interactive selection
         print("\nCommands:")
@@ -368,11 +376,15 @@ class StripeCalendarInvoicer:
                         if meeting['invoice_status'] == 'not_invoiced':
                             meeting['selected'] = True
                 print("✓ Selected all uninvoiced meetings")
+                # Refresh display after change
+                meeting_map = display_meeting_list()
             elif command == 'none':
                 for customer_id, data in customers_with_meetings.items():
                     for meeting in data['meetings']:
                         meeting['selected'] = False
                 print("✓ Deselected all meetings")
+                # Refresh display after change
+                meeting_map = display_meeting_list()
             elif command.isdigit():
                 meeting_num = int(command)
                 if meeting_num in meeting_map:
@@ -385,6 +397,8 @@ class StripeCalendarInvoicer:
                         meeting['selected'] = not meeting['selected']
                         action = "Selected" if meeting['selected'] else "Deselected"
                         print(f"✓ {action} meeting #{meeting_num}")
+                        # Refresh display after change
+                        meeting_map = display_meeting_list()
                 else:
                     print(f"❌ Invalid meeting number: {meeting_num}")
             else:
