@@ -355,12 +355,17 @@ class StripeCalendarInvoicer:
         meeting_map = display_meeting_list()
         
         # Interactive selection
-        print("\nCommands:")
-        print("  [number]     - Toggle selection for meeting")
-        print("  'all'        - Select all uninvoiced meetings")  
-        print("  'none'       - Deselect all meetings")
-        print("  'continue'   - Continue to synopsis entry")
-        print("  'quit'       - Exit program")
+        def show_commands():
+            """Helper function to display available commands"""
+            print("\nCommands:")
+            print("  [number]     - Toggle selection for meeting")
+            print("  'all'        - Select all uninvoiced meetings")  
+            print("  'none'       - Deselect all meetings")
+            print("  'continue'   - Continue to synopsis entry")
+            print("  'quit'       - Exit program")
+            print("  '?'          - Show this help message")
+        
+        show_commands()
         
         while True:
             command = input("\nEnter command: ").strip().lower()
@@ -370,6 +375,8 @@ class StripeCalendarInvoicer:
                 exit(0)
             elif command == 'continue':
                 break
+            elif command == '?' or command == 'help':
+                show_commands()
             elif command == 'all':
                 for customer_id, data in customers_with_meetings.items():
                     for meeting in data['meetings']:
@@ -401,8 +408,10 @@ class StripeCalendarInvoicer:
                         meeting_map = display_meeting_list()
                 else:
                     print(f"❌ Invalid meeting number: {meeting_num}")
+                    show_commands()
             else:
-                print("❌ Invalid command")
+                print(f"❌ Invalid command: '{command}'")
+                show_commands()
         
         return self.get_synopsis_for_selected_meetings(customers_with_meetings)
     
