@@ -38,6 +38,7 @@ from googleapiclient.errors import HttpError
 import json
 import logging
 import hashlib
+from dotenv import load_dotenv
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -512,7 +513,7 @@ class StripeCalendarInvoicer:
             logger.error(f"Error creating invoice for {customer['name']}: {e}")
             return None
     
-    def run_automation(self, default_hourly_rate=150.00):
+    def run_automation(self, default_hourly_rate=250.00):
         """
         Run the complete automation process with interactive selection
         
@@ -575,13 +576,17 @@ class StripeCalendarInvoicer:
 def main():
     """Main function to run the automation"""
     
-    # Configuration - customize these values
-    STRIPE_API_KEY = os.getenv('STRIPE_SECRET_KEY')  # Set this environment variable
-    DAYS_BACK = 7  # Look back 7 days for meetings
-    DEFAULT_HOURLY_RATE = 150.00  # Default hourly rate for clients without a specific rate set
+    # Load environment variables from .env file
+    load_dotenv()
+    
+    # Configuration - loads from environment variables with defaults
+    STRIPE_API_KEY = os.getenv('STRIPE_SECRET_KEY')
+    DAYS_BACK = int(os.getenv('DAYS_BACK', '7'))  # Default to 7 days
+    DEFAULT_HOURLY_RATE = float(os.getenv('DEFAULT_HOURLY_RATE', '250.00'))  # Default to $250/hour
     
     if not STRIPE_API_KEY:
-        logger.error("Please set STRIPE_SECRET_KEY environment variable")
+        logger.error("Please set STRIPE_SECRET_KEY environment variable in your .env file")
+        logger.error("Copy config.env.template to .env and fill in your values")
         return
     
     print("🚀 Stripe Customer Meeting Invoice Automation")

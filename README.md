@@ -230,3 +230,84 @@ If you encounter issues:
 ---
 
 **⚡ Happy Invoicing!** This script can save hours of manual invoice creation while ensuring nothing falls through the cracks.
+
+## Setup Instructions
+
+### 1. Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Environment Configuration
+
+Copy the environment template and configure your settings:
+
+```bash
+cp config.env.template .env
+```
+
+Edit `.env` file with your actual values:
+
+```env
+# Stripe Configuration
+STRIPE_SECRET_KEY=sk_test_your_actual_stripe_secret_key_here
+
+# Invoice Settings  
+DEFAULT_HOURLY_RATE=150.00
+DAYS_BACK=7
+```
+
+**Environment Variables:**
+- `STRIPE_SECRET_KEY` - Your Stripe secret API key (required)
+- `DEFAULT_HOURLY_RATE` - Default hourly rate for customers without specific rates (default: 150.00)
+- `DAYS_BACK` - Number of days back to check for meetings (default: 7)
+
+### 3. Google Calendar Setup
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select existing one
+3. Enable the Google Calendar API
+4. Create credentials (OAuth 2.0 Client ID) for a desktop application
+5. Download the credentials JSON file and save it as `credentials.json` in the project directory
+
+### 4. Stripe Customer Setup
+
+Set customer hourly rates in Stripe:
+- Go to Stripe Dashboard > Customers > [Customer] > Edit
+- Add metadata: key="hourly_rate", value="200.00"
+- Or use the `set_customer_hourly_rate()` method in the script
+
+For customers without a specific rate, the `DEFAULT_HOURLY_RATE` will be used.
+
+## Usage
+
+Run the automation:
+
+```bash
+python invoice_automation.py
+```
+
+The script will:
+1. Load your environment variables from `.env`
+2. Authenticate with Google Calendar (browser will open on first run)
+3. Fetch customers from Stripe
+4. Find recent meetings and show interactive selection interface
+5. Allow you to enter custom synopses for each meeting
+6. Create draft invoices in Stripe
+
+## Example: Setting Customer Rates Programmatically
+
+```python
+invoicer = StripeCalendarInvoicer(stripe_api_key="sk_...")
+invoicer.set_customer_hourly_rate("cus_ABC123", 200.00)  # $200/hour for premium client
+invoicer.set_customer_hourly_rate("cus_DEF456", 125.00)  # $125/hour for standard client
+invoicer.set_customer_hourly_rate("cus_GHI789", 300.00)  # $300/hour for enterprise client
+```
+
+## Security Notes
+
+- Your `.env` file is automatically ignored by git (included in `.gitignore`)
+- Never commit your actual Stripe API keys to version control
+- Use test keys during development
+- The `credentials.json` file is also gitignored for security
