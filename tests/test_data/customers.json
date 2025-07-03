@@ -1,0 +1,47 @@
+{
+  "customers": [
+    {
+      "id": "cus_ALICE",
+      "email": "alice@techcorp.com",
+      "name": "Alice Johnson",
+      "created": 1609459200,
+      "metadata": {
+        "hourly_rate": "175.00"
+      }
+    },
+    {
+      "id": "cus_BOB",
+      "email": "bob@designstudio.com",
+      "name": "Bob Smith",
+      "created": 1609459200,
+      "metadata": {
+        "hourly_rate": "225.00"
+      }
+    },
+    {
+      "id": "cus_CHARLIE",
+      "email": "charlie@startup.io",
+      "name": "Charlie Davis",
+      "created": 1609459200,
+      "metadata": {}
+    },
+    {
+      "id": "cus_DIANA",
+      "email": "diana@enterprise.com",
+      "name": "Diana Wilson",
+      "created": 1609459200,
+      "metadata": {
+        "hourly_rate": "300.00"
+      }
+    },
+    {
+      "id": "cus_EDWARD",
+      "email": "edward@consulting.net",
+      "name": "Edward Brown",
+      "created": 1609459200,
+      "metadata": {
+        "hourly_rate": "150.00"
+      }
+    }
+  ]
+}

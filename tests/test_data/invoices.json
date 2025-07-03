@@ -1,0 +1,58 @@
+{
+  "invoices": [
+    {
+      "id": "inv_ALICE001",
+      "customer": "cus_ALICE",
+      "status": "paid",
+      "created": 1704067200,
+      "lines": {
+        "data": [
+          {
+            "id": "li_001",
+            "description": "Strategy Session - 2025-01-08 at 10:00 AM (1.5h @ $175/h) [ID:abc123def456]",
+            "amount": 26250,
+            "currency": "usd"
+          }
+        ]
+      }
+    },
+    {
+      "id": "inv_BOB001",
+      "customer": "cus_BOB",
+      "status": "draft",
+      "created": 1704153600,
+      "lines": {
+        "data": [
+          {
+            "id": "li_002",
+            "description": "Design Workshop - 2025-01-09 at 2:00 PM (2.0h @ $225/h) [ID:ghi789jkl012]",
+            "amount": 45000,
+            "currency": "usd"
+          }
+        ]
+      }
+    },
+    {
+      "id": "inv_DIANA001",
+      "customer": "cus_DIANA",
+      "status": "open",
+      "created": 1704240000,
+      "lines": {
+        "data": [
+          {
+            "id": "li_003",
+            "description": "Board Presentation Prep - 2025-01-10 at 11:00 AM (3.0h @ $300/h) [ID:mno345pqr678]",
+            "amount": 90000,
+            "currency": "usd"
+          },
+          {
+            "id": "li_004",
+            "description": "Executive Strategy Session - 2025-01-10 at 3:00 PM (2.0h @ $300/h) [ID:stu901vwx234]",
+            "amount": 60000,
+            "currency": "usd"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -14,6 +14,9 @@ This Python script automatically identifies meetings with your Stripe customers,
 - **📝 Custom Synopses**: Add personalized descriptions for each meeting on the invoice
 - **📊 Status Tracking**: Shows if meetings are uninvoiced, drafted, or already sent
 - **⏱️ Duration-Based Billing**: Automatically calculates meeting duration and invoice amounts
+- **✏️ Meeting Time/Duration Override**: Edit meeting start times and durations if actual differs from scheduled
+- **💵 Per-Meeting Rate Override**: Set custom rates for specific meetings
+- **🔄 Customer Rate Management**: Update customer default rates during invoicing workflow
 
 ## 🖥️ Interactive Workflow
 
@@ -35,21 +38,50 @@ This Python script automatically identifies meetings with your Stripe customers,
 - 📄 **Draft created** (invoice drafted but not sent)
 - ✅ **Invoice sent** (already invoiced and sent)
 
-### 2. Meeting Selection
-- Toggle individual meetings on/off
-- Bulk select all uninvoiced meetings
-- Cannot select already-invoiced meetings
+### 2. Meeting Selection & Editing
+
+**Commands available during selection:**
+- `[number]` - Toggle selection for a meeting
+- `all` - Select all uninvoiced meetings
+- `none` - Deselect all meetings
+- `edit [number]` - Edit meeting time and duration
+- `time [number]` - Quick shortcut for editing (same as edit)
+- `rate [number] [amount]` - Set custom rate for a specific meeting
+- `setrate [email] [amount]` - Update customer's default hourly rate
+- `continue` - Proceed to synopsis entry
+- `quit` - Exit program
+- `?` - Show help
+
+**Example: Editing a meeting**
+```
+Enter command: edit 1
+
+📝 EDITING MEETING: Weekly Strategy Review
+📅 Original: 2025-06-15 at 2:00 PM (1.0h)
+
+Enter new values (press Enter to keep current):
+Start time [2:00 PM]: 2:30 PM
+Duration in hours [1.0]: 1.5
+
+✅ Meeting updated:
+📅 2025-06-15 at 2:30 PM (1.5h)
+✏️ This meeting has been edited
+```
+
+**Visual Indicators:**
+- ✏️ = Meeting time/duration has been edited
+- 💰$X/h = Custom rate applied to meeting
 
 ### 3. Synopsis Entry
 ```
-📅 Weekly Strategy Review - 2025-06-15 at 2:00 PM
-   Duration: 1.0h
+📅 Weekly Strategy Review - 2025-06-15 at 2:30 PM ✏️
+   Duration: 1.5h
 Synopsis [Weekly Strategy Review]: Discussed Q3 goals and budget planning
 ✓ Synopsis saved: Discussed Q3 goals and budget planning
 ```
 
 ### 4. Final Confirmation
-Review all selected meetings, rates, and total amounts before creating invoices.
+Review all selected meetings (including edits and custom rates), rates, and total amounts before creating invoices.
 
 ## 🛠️ Installation
 
@@ -135,32 +167,53 @@ Each meeting becomes a separate line item:
 
 ## 💡 Examples
 
-### Sample Meeting Selection Session
+### Sample Meeting Selection Session with New Features
 ```
-Commands:
-  [number]     - Toggle selection for meeting
-  'all'        - Select all uninvoiced meetings  
-  'none'       - Deselect all meetings
-  'continue'   - Continue to synopsis entry
-  'quit'       - Exit program
+📧 John Smith (john@company.com) - $200/hour
+------------------------------------------------------------
+ 1. [✓] ⭕ Weekly Strategy Review
+    📅 2025-06-15 at 2:00 PM (1.0h) - $200.00
+    📊 Status: Not invoiced
 
-Enter command: 1
-✓ Selected meeting #1
+ 2. [ ] ⭕ Project Planning Meeting  
+    📅 2025-06-17 at 10:30 AM (1.0h) - $200.00
+    📊 Status: Not invoiced
 
-Enter command: all
-✓ Selected all uninvoiced meetings
+Enter command: edit 1
+
+📝 EDITING MEETING: Weekly Strategy Review
+📅 Original: 2025-06-15 at 2:00 PM (1.0h)
+
+Enter new values (press Enter to keep current):
+Start time [2:00 PM]: 2:30 PM
+Duration in hours [1.0]: 1.5
+
+✅ Meeting updated:
+📅 2025-06-15 at 2:30 PM (1.5h)
+✏️ This meeting has been edited
+
+Enter command: rate 2 250
+✓ Set custom rate for meeting #2: $250/hour
+
+Enter command: setrate john@company.com 225
+✓ Updated hourly rate for john@company.com: $225/hour
 
 Enter command: continue
 ```
 
-### Sample Invoice Output
+### Sample Invoice Output with Edited Meetings
 ```
 📊 SUMMARY:
-   Total Meetings: 3
-   Total Amount: $675.00
+   Total Meetings: 2
+   Total Amount: $475.00
+   
+   • Weekly Strategy Review ✏️
+     2025-06-15 at 2:30 PM (1.5h) - $300.00
+   • Project Planning Meeting 💰$250/h
+     2025-06-17 at 10:30 AM (1.0h) - $250.00
 
-Create 3 draft invoices? (y/n): y
-✅ SUCCESS: Created 3 draft invoices!
+Create 2 draft invoices? (y/n): y
+✅ SUCCESS: Created 2 draft invoices!
 ```
 
 ## 🔧 Troubleshooting
@@ -193,6 +246,35 @@ your-project/
 └── README.md
 ```
 
+## 🧪 Testing
+
+The project includes a comprehensive test suite with 48 tests covering all functionality.
+
+### Running Tests
+
+```bash
+# Install test dependencies
+pip install -r test_requirements.txt
+
+# Run all tests with coverage
+python run_tests.py all --coverage
+
+# Run specific test suites
+python run_tests.py unit        # Unit tests for core functions
+python run_tests.py integration # Integration tests (Stripe/Google)
+python run_tests.py commands    # Interactive command tests
+python run_tests.py e2e        # End-to-end workflow tests
+```
+
+### Test Coverage
+- **48 tests** with **70%+ code coverage**
+- Unit tests for parsing, validation, and core logic
+- Integration tests with mocked external services
+- Command tests for all interactive features
+- End-to-end tests for complete workflows
+
+See [TESTING.md](TESTING.md) for detailed testing documentation.
+
 ## 🎯 Best Practices
 
 1. **Test First**: Run the script in a test environment before production
@@ -200,6 +282,7 @@ your-project/
 3. **Regular Backups**: Keep backups of your `credentials.json` and customer rate data
 4. **Rate Management**: Use Stripe metadata for customer-specific rates rather than hardcoding
 5. **Meeting Names**: Use descriptive meeting titles in Google Calendar for better synopses
+6. **Time Accuracy**: Use the edit feature to correct meeting times that ran longer/shorter than scheduled
 
 ## 🔒 Security Notes
 

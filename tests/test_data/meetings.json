@@ -1,0 +1,106 @@
+{
+  "events": [
+    {
+      "id": "cal_001",
+      "summary": "Strategy Planning Session",
+      "start": {
+        "dateTime": "2025-01-15T10:00:00-05:00"
+      },
+      "end": {
+        "dateTime": "2025-01-15T11:30:00-05:00"
+      },
+      "attendees": [
+        {
+          "email": "alice@techcorp.com",
+          "responseStatus": "accepted"
+        }
+      ],
+      "description": "Quarterly strategy review and planning"
+    },
+    {
+      "id": "cal_002",
+      "summary": "Design Review",
+      "start": {
+        "dateTime": "2025-01-15T14:00:00-05:00"
+      },
+      "end": {
+        "dateTime": "2025-01-15T15:00:00-05:00"
+      },
+      "attendees": [
+        {
+          "email": "bob@designstudio.com",
+          "responseStatus": "accepted"
+        }
+      ],
+      "description": "Review new design concepts"
+    },
+    {
+      "id": "cal_003",
+      "summary": "Quick Check-in",
+      "start": {
+        "dateTime": "2025-01-16T09:00:00-05:00"
+      },
+      "end": {
+        "dateTime": "2025-01-16T09:30:00-05:00"
+      },
+      "attendees": [
+        {
+          "email": "charlie@startup.io",
+          "responseStatus": "accepted"
+        }
+      ],
+      "description": "Weekly status update"
+    },
+    {
+      "id": "cal_004",
+      "summary": "Executive Briefing",
+      "start": {
+        "dateTime": "2025-01-16T11:00:00-05:00"
+      },
+      "end": {
+        "dateTime": "2025-01-16T13:00:00-05:00"
+      },
+      "attendees": [
+        {
+          "email": "diana@enterprise.com",
+          "responseStatus": "accepted"
+        }
+      ],
+      "description": "C-suite strategic briefing"
+    },
+    {
+      "id": "cal_005",
+      "summary": "Technical Consultation",
+      "start": {
+        "dateTime": "2025-01-17T15:00:00-05:00"
+      },
+      "end": {
+        "dateTime": "2025-01-17T16:30:00-05:00"
+      },
+      "attendees": [
+        {
+          "email": "edward@consulting.net",
+          "responseStatus": "accepted"
+        }
+      ],
+      "description": "Deep dive into technical architecture"
+    },
+    {
+      "id": "cal_006",
+      "summary": "Follow-up Discussion",
+      "start": {
+        "dateTime": "2025-01-18T10:00:00-05:00"
+      },
+      "end": {
+        "dateTime": "2025-01-18T10:45:00-05:00"
+      },
+      "attendees": [
+        {
+          "email": "alice@techcorp.com",
+          "responseStatus": "accepted"
+        }
+      ],
+      "description": "Follow-up on action items"
+    }
+  ]
+}

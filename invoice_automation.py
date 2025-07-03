@@ -152,6 +152,73 @@ class StripeCalendarInvoicer:
             logger.warning(f"Invalid hourly rate in metadata for {customer.get('name', 'Unknown')}, using default: ${default_rate}")
             return default_rate
     
+    def parse_time_input(self, time_str):
+        """Parse various time formats into datetime object"""
+        if not time_str or time_str.strip() == "":
+            return None
+            
+        time_str = time_str.strip()
+        
+        # Try different time formats
+        formats = [
+            "%I:%M %p",      # 2:30 PM
+            "%I:%M%p",       # 2:30PM
+            "%H:%M",         # 14:30
+            "%I %p",         # 2 PM
+            "%I%p",          # 2PM
+            "%H"             # 14
+        ]
+        
+        for fmt in formats:
+            try:
+                return datetime.strptime(time_str, fmt).time()
+            except ValueError:
+                continue
+        
+        raise ValueError(f"Unable to parse time: {time_str}")
+    
+    def parse_duration_input(self, duration_str):
+        """Parse duration input into hours (float)"""
+        if not duration_str or duration_str.strip() == "":
+            return None
+            
+        duration_str = duration_str.strip().lower()
+        
+        # Remove common suffixes (order matters - longer patterns first)
+        duration_str = duration_str.replace('hours', '').replace('hour', '').replace('hr', '').replace('h', '').strip()
+        
+        try:
+            # Handle formats like "1.5", "2", "0.5"
+            duration = float(duration_str)
+            if duration <= 0 or duration > 24:
+                raise ValueError("Duration must be between 0 and 24 hours")
+            return duration
+        except ValueError as e:
+            # Re-raise our specific error messages
+            if "Duration must be between" in str(e):
+                raise
+            # Otherwise it's a parsing error
+            raise ValueError(f"Unable to parse duration: {duration_str}")
+    
+    def validate_hourly_rate(self, rate_str):
+        """Validate and parse hourly rate input"""
+        if not rate_str or rate_str.strip() == "":
+            return None
+            
+        rate_str = rate_str.strip().replace('$', '').replace(',', '')
+        
+        try:
+            rate = float(rate_str)
+            if rate <= 0 or rate > 10000:
+                raise ValueError("Rate must be between $0 and $10,000")
+            return rate
+        except ValueError as e:
+            # Re-raise our specific error messages
+            if "Rate must be between" in str(e):
+                raise
+            # Otherwise it's a parsing error
+            raise ValueError(f"Unable to parse rate: {rate_str}")
+    
     def get_stripe_customers(self):
         """Fetch all customers from Stripe with email addresses"""
         logger.info("Fetching Stripe customers...")
@@ -291,7 +358,12 @@ class StripeCalendarInvoicer:
                         'end_time': end_time,
                         'invoice_status': invoice_status,
                         'selected': invoice_status == 'not_invoiced',  # Default selection
-                        'synopsis': ''  # Will be filled in during interactive session
+                        'synopsis': '',  # Will be filled in during interactive session
+                        # New fields for override functionality
+                        'edited_start_time': None,
+                        'edited_duration': None,
+                        'custom_rate': None,
+                        'is_edited': False
                     }
                     customers_with_meetings[customer_id]['meetings'].append(meeting_info)
         
@@ -303,6 +375,88 @@ class StripeCalendarInvoicer:
         
         logger.info(f"Total customers with recent meetings: {len(customers_with_meetings)}")
         return customers_with_meetings
+    
+    def edit_meeting_details(self, meeting, customer_data):
+        """Interactive function to edit meeting start time and duration"""
+        print(f"\n📝 EDITING MEETING: {meeting['summary']}")
+        print(f"📅 Original: {meeting['date']} at {meeting['time']} ({meeting['duration']}h)")
+        
+        if meeting['is_edited']:
+            try:
+                current_time = meeting['edited_start_time'].strftime("%I:%M %p") if meeting['edited_start_time'] else meeting['time']
+            except (AttributeError, ValueError):
+                current_time = meeting['time']
+            current_duration = meeting['edited_duration'] if meeting['edited_duration'] else meeting['duration']
+            print(f"📅 Current: {meeting['date']} at {current_time} ({current_duration}h)")
+        
+        print("\nEnter new values (press Enter to keep current):")
+        
+        # Edit start time
+        while True:
+            try:
+                try:
+                    current_time_display = meeting['edited_start_time'].strftime("%I:%M %p") if meeting['edited_start_time'] else meeting['time']
+                except (AttributeError, ValueError):
+                    current_time_display = meeting['time']
+                time_input = input(f"Start time [{current_time_display}]: ").strip()
+                
+                if not time_input:
+                    # Keep current time
+                    break
+                elif time_input.lower() == 'original':
+                    # Reset to original
+                    meeting['edited_start_time'] = None
+                    break
+                else:
+                    # Parse new time
+                    parsed_time = self.parse_time_input(time_input)
+                    meeting['edited_start_time'] = parsed_time
+                    break
+                    
+            except ValueError as e:
+                print(f"❌ {e}")
+                print("Examples: '2:30 PM', '14:30', '2 PM', or 'original' to reset")
+        
+        # Edit duration
+        while True:
+            try:
+                current_duration = meeting['edited_duration'] if meeting['edited_duration'] else meeting['duration']
+                duration_input = input(f"Duration in hours [{current_duration}]: ").strip()
+                
+                if not duration_input:
+                    # Keep current duration
+                    break
+                elif duration_input.lower() == 'original':
+                    # Reset to original
+                    meeting['edited_duration'] = None
+                    break
+                else:
+                    # Parse new duration
+                    parsed_duration = self.parse_duration_input(duration_input)
+                    meeting['edited_duration'] = parsed_duration
+                    break
+                    
+            except ValueError as e:
+                print(f"❌ {e}")
+                print("Examples: '1.5', '2', '0.5', or 'original' to reset")
+        
+        # Update is_edited flag
+        meeting['is_edited'] = (meeting['edited_start_time'] is not None or 
+                               meeting['edited_duration'] is not None)
+        
+        # Show final result
+        try:
+            display_time = meeting['edited_start_time'].strftime("%I:%M %p") if meeting['edited_start_time'] else meeting['time']
+        except (AttributeError, ValueError):
+            display_time = meeting['time']
+        display_duration = meeting['edited_duration'] if meeting['edited_duration'] else meeting['duration']
+        
+        print(f"\n✅ Meeting updated:")
+        print(f"📅 {meeting['date']} at {display_time} ({display_duration}h)")
+        if meeting['is_edited']:
+            print("✏️ This meeting has been edited")
+        
+        return True
     
     def display_meetings_interactive(self, customers_with_meetings, default_hourly_rate):
         """Interactive session to select meetings and enter synopses"""
@@ -342,10 +496,32 @@ class StripeCalendarInvoicer:
                     }[meeting['invoice_status']]
                     
                     selected_symbol = '[✓]' if meeting['selected'] else '[ ]'
-                    amount = meeting['duration'] * hourly_rate
                     
-                    print(f"{meeting_index:2}. {selected_symbol} {status_symbol} {meeting['summary']}")
-                    print(f"    📅 {meeting['date']} at {meeting['time']} ({meeting['duration']}h) - ${amount:.2f}")
+                    # Use edited values if available
+                    display_duration = meeting['edited_duration'] if meeting['edited_duration'] is not None else meeting['duration']
+                    try:
+                        display_time = meeting['edited_start_time'].strftime("%I:%M %p") if meeting['edited_start_time'] else meeting['time']
+                    except (AttributeError, ValueError):
+                        display_time = meeting['time']  # Fallback to original time
+                    
+                    # Use custom rate if available
+                    rate_to_use = meeting['custom_rate'] if meeting['custom_rate'] is not None else hourly_rate
+                    amount = display_duration * rate_to_use
+                    
+                    # Build meeting title with indicators
+                    meeting_title = f"{meeting['summary']}"
+                    if meeting['is_edited']:
+                        meeting_title += " ✏️"
+                    if meeting['custom_rate'] is not None:
+                        meeting_title += f" 💰${meeting['custom_rate']}/h"
+                    
+                    print(f"{meeting_index:2}. {selected_symbol} {status_symbol} {meeting_title}")
+                    print(f"    📅 {meeting['date']} at {display_time} ({display_duration}h) - ${amount:.2f}")
+                    
+                    # Show original values if meeting was edited
+                    if meeting['is_edited']:
+                        print(f"    📅 Original: {meeting['date']} at {meeting['time']} ({meeting['duration']}h)")
+                    
                     print(f"    📊 Status: {status_text}")
                     print()
             
@@ -358,12 +534,19 @@ class StripeCalendarInvoicer:
         def show_commands():
             """Helper function to display available commands"""
             print("\nCommands:")
-            print("  [number]     - Toggle selection for meeting")
-            print("  'all'        - Select all uninvoiced meetings")  
-            print("  'none'       - Deselect all meetings")
-            print("  'continue'   - Continue to synopsis entry")
-            print("  'quit'       - Exit program")
-            print("  '?'          - Show this help message")
+            print("  [number]                      - Toggle selection for meeting")
+            print("  'all'                         - Select all uninvoiced meetings")  
+            print("  'none'                        - Deselect all meetings")
+            print("  'edit [number]'               - Edit meeting time/duration")
+            print("  'time [number]'               - Quick edit meeting time/duration")
+            print("  'rate [number] [amount]'      - Set custom rate for meeting")
+            print("  'setrate [email] [amount]'    - Update customer's default rate")
+            print("  'continue'                    - Continue to synopsis entry")
+            print("  'quit'                        - Exit program")
+            print("  '?'                           - Show this help message")
+            print("\nIcons:")
+            print("  ✏️ = Meeting time/duration edited")
+            print("  💰 = Custom rate applied")
         
         show_commands()
         
@@ -409,6 +592,98 @@ class StripeCalendarInvoicer:
                 else:
                     print(f"❌ Invalid meeting number: {meeting_num}")
                     show_commands()
+            elif command.startswith('edit '):
+                # Edit meeting details (time/duration)
+                try:
+                    meeting_num = int(command.split()[1])
+                    if meeting_num in meeting_map:
+                        customer_id, meeting_idx = meeting_map[meeting_num]
+                        meeting = customers_with_meetings[customer_id]['meetings'][meeting_idx]
+                        customer_data = customers_with_meetings[customer_id]
+                        self.edit_meeting_details(meeting, customer_data)
+                        # Refresh display after edit
+                        meeting_map = display_meeting_list()
+                    else:
+                        print(f"❌ Invalid meeting number: {meeting_num}")
+                except (ValueError, IndexError):
+                    print("❌ Usage: edit [meeting_number]")
+                    print("Example: edit 1")
+            elif command.startswith('time '):
+                # Quick time edit shortcut
+                try:
+                    meeting_num = int(command.split()[1])
+                    if meeting_num in meeting_map:
+                        customer_id, meeting_idx = meeting_map[meeting_num]
+                        meeting = customers_with_meetings[customer_id]['meetings'][meeting_idx]
+                        customer_data = customers_with_meetings[customer_id]
+                        self.edit_meeting_details(meeting, customer_data)
+                        # Refresh display after edit
+                        meeting_map = display_meeting_list()
+                    else:
+                        print(f"❌ Invalid meeting number: {meeting_num}")
+                except (ValueError, IndexError):
+                    print("❌ Usage: time [meeting_number]")
+                    print("Example: time 1")
+            elif command.startswith('rate '):
+                # Set per-meeting rate override
+                try:
+                    parts = command.split()
+                    if len(parts) >= 3:
+                        meeting_num = int(parts[1])
+                        rate_str = ' '.join(parts[2:])
+                        if meeting_num in meeting_map:
+                            customer_id, meeting_idx = meeting_map[meeting_num]
+                            meeting = customers_with_meetings[customer_id]['meetings'][meeting_idx]
+                            try:
+                                rate = self.validate_hourly_rate(rate_str)
+                                meeting['custom_rate'] = rate
+                                print(f"✓ Set custom rate for meeting #{meeting_num}: ${rate}/hour")
+                                # Refresh display after change
+                                meeting_map = display_meeting_list()
+                            except ValueError as e:
+                                print(f"❌ {e}")
+                        else:
+                            print(f"❌ Invalid meeting number: {meeting_num}")
+                    else:
+                        print("❌ Usage: rate [meeting_number] [rate]")
+                        print("Example: rate 1 250")
+                except (ValueError, IndexError):
+                    print("❌ Usage: rate [meeting_number] [rate]")
+                    print("Example: rate 1 250")
+            elif command.startswith('setrate '):
+                # Set customer default rate
+                try:
+                    parts = command.split()
+                    if len(parts) >= 3:
+                        customer_email = parts[1]
+                        rate_str = ' '.join(parts[2:])
+                        # Find customer by email
+                        customer_found = False
+                        for customer_id, data in customers_with_meetings.items():
+                            if data['customer']['email'].lower() == customer_email.lower():
+                                try:
+                                    rate = self.validate_hourly_rate(rate_str)
+                                    # Update customer rate in Stripe
+                                    if self.set_customer_hourly_rate(customer_id, rate):
+                                        print(f"✓ Updated hourly rate for {customer_email}: ${rate}/hour")
+                                        # Refresh display after change
+                                        meeting_map = display_meeting_list()
+                                    else:
+                                        print(f"❌ Failed to update rate for {customer_email}")
+                                    customer_found = True
+                                    break
+                                except ValueError as e:
+                                    print(f"❌ {e}")
+                                    customer_found = True
+                                    break
+                        if not customer_found:
+                            print(f"❌ Customer not found: {customer_email}")
+                    else:
+                        print("❌ Usage: setrate [customer_email] [rate]")
+                        print("Example: setrate john@company.com 250")
+                except (ValueError, IndexError):
+                    print("❌ Usage: setrate [customer_email] [rate]")
+                    print("Example: setrate john@company.com 250")
             else:
                 print(f"❌ Invalid command: '{command}'")
                 show_commands()
@@ -466,8 +741,15 @@ class StripeCalendarInvoicer:
                 continue
             
             hourly_rate = self.get_customer_hourly_rate(customer, default_hourly_rate)
-            customer_total = sum(m['duration'] * hourly_rate for m in selected_meetings)
-            customer_hours = sum(m['duration'] for m in selected_meetings)
+            
+            # Calculate total using override values
+            customer_total = 0
+            customer_hours = 0
+            for m in selected_meetings:
+                duration = m['edited_duration'] if m['edited_duration'] is not None else m['duration']
+                rate = m['custom_rate'] if m['custom_rate'] is not None else hourly_rate
+                customer_total += duration * rate
+                customer_hours += duration
             
             print(f"\n📧 {customer['name']} ({customer['email']})")
             print(f"   Hourly Rate: ${hourly_rate}/hour")
@@ -475,9 +757,22 @@ class StripeCalendarInvoicer:
             print("   " + "-" * 50)
             
             for meeting in selected_meetings:
-                amount = meeting['duration'] * hourly_rate
-                print(f"   • {meeting['synopsis']}")
-                print(f"     {meeting['date']} at {meeting['time']} ({meeting['duration']}h) - ${amount:.2f}")
+                duration = meeting['edited_duration'] if meeting['edited_duration'] is not None else meeting['duration']
+                rate = meeting['custom_rate'] if meeting['custom_rate'] is not None else hourly_rate
+                amount = duration * rate
+                try:
+                    display_time = meeting['edited_start_time'].strftime("%I:%M %p") if meeting['edited_start_time'] else meeting['time']
+                except (AttributeError, ValueError):
+                    display_time = meeting['time']  # Fallback to original time
+                
+                meeting_line = f"   • {meeting['synopsis']}"
+                if meeting['is_edited']:
+                    meeting_line += " ✏️"
+                if meeting['custom_rate'] is not None:
+                    meeting_line += f" 💰${meeting['custom_rate']}/h"
+                
+                print(meeting_line)
+                print(f"     {meeting['date']} at {display_time} ({duration}h) - ${amount:.2f}")
             
             total_amount += customer_total
             total_meetings += len(selected_meetings)
@@ -513,12 +808,20 @@ class StripeCalendarInvoicer:
             # Add line item for each meeting
             total_amount = 0
             for meeting in meetings:
-                # Calculate amount based on duration and customer's hourly rate
-                amount = meeting['duration'] * hourly_rate
+                # Use override values if available
+                duration = meeting['edited_duration'] if meeting['edited_duration'] is not None else meeting['duration']
+                rate = meeting['custom_rate'] if meeting['custom_rate'] is not None else hourly_rate
+                amount = duration * rate
                 total_amount += amount
                 
+                # Use edited time if available
+                try:
+                    display_time = meeting['edited_start_time'].strftime("%I:%M %p") if meeting['edited_start_time'] else meeting['time']
+                except (AttributeError, ValueError):
+                    display_time = meeting['time']  # Fallback to original time
+                
                 # Create description with meeting ID and synopsis
-                description = f"{meeting['synopsis']} - {meeting['date']} at {meeting['time']} ({meeting['duration']}h @ ${hourly_rate}/h) [ID:{meeting['id']}]"
+                description = f"{meeting['synopsis']} - {meeting['date']} at {display_time} ({duration}h @ ${rate}/h) [ID:{meeting['id']}]"
                 
                 stripe.InvoiceItem.create(
                     customer=customer['id'],
