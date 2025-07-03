@@ -6,7 +6,8 @@ This Python script automatically identifies meetings with your Stripe customers,
 
 ## ✨ Features
 
-- **📅 Calendar Integration**: Automatically fetches meetings from Google Calendar
+- **📅 Calendar Integration**: Automatically fetches meetings from Google Calendar with robust authentication handling
+- **🔐 Smart Token Management**: Automatically handles token expiration with user-friendly re-authentication prompts
 - **👥 Customer Matching**: Cross-references meeting attendees with your Stripe customer list
 - **💰 Flexible Pricing**: Support for different hourly rates per customer (stored in Stripe metadata)
 - **🔍 Duplicate Prevention**: Tracks which meetings have already been invoiced to prevent double-billing
@@ -233,6 +234,18 @@ Create 2 draft invoices? (y/n): y
 - Re-authenticate Google Calendar (delete `token.json`)
 - Check Google Calendar API is enabled in Google Cloud Console
 
+**"Google Calendar token has expired and cannot be refreshed"**
+- This happens when the OAuth token has been expired for too long (usually 6 months of inactivity)
+- The script will prompt you to remove the expired token and re-authenticate
+- Choose 'y' to automatically remove `token.json` and start fresh authentication
+- If you choose 'n', you'll need to manually delete `token.json` and run the script again
+
+**"Failed to initialize Google Calendar service"**
+- Check that `credentials.json` exists and is valid
+- Ensure Google Calendar API is enabled in your Google Cloud project
+- Verify your OAuth 2.0 credentials are configured for a desktop application
+- Try downloading fresh credentials from Google Cloud Console
+
 **Missing customer hourly rates**
 - The script will use `DEFAULT_HOURLY_RATE` for customers without metadata
 - Set customer-specific rates in Stripe metadata: `hourly_rate` = `200.00`
@@ -290,6 +303,8 @@ See [TESTING.md](TESTING.md) for detailed testing documentation.
 - Use environment variables for sensitive API keys
 - Stripe API keys should be kept secure and rotated regularly
 - The script only requires read access to Google Calendar
+- Authentication tokens are automatically managed with graceful expiration handling
+- Expired tokens prompt for user consent before removal and re-authentication
 
 ## 📄 License
 

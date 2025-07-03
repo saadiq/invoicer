@@ -68,6 +68,8 @@ class StripeCalendarInvoicer:
         
         # Initialize Google Calendar service
         self.calendar_service = self._get_calendar_service()
+        if not self.calendar_service:
+            raise Exception("Failed to initialize Google Calendar service. Please check your credentials and try again.")
     
     def _get_calendar_service(self):
         """Authenticate and return Google Calendar service"""
@@ -75,22 +77,69 @@ class StripeCalendarInvoicer:
         
         # Load existing token
         if os.path.exists(self.token_file):
-            creds = Credentials.from_authorized_user_file(self.token_file, self.calendar_scopes)
+            try:
+                creds = Credentials.from_authorized_user_file(self.token_file, self.calendar_scopes)
+            except Exception as e:
+                logger.warning(f"Error loading existing token: {e}")
+                creds = None
         
         # If no valid credentials, get new ones
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    self.calendar_credentials_file, self.calendar_scopes)
-                creds = flow.run_local_server(port=0)
+                try:
+                    creds.refresh(Request())
+                except Exception as e:
+                    logger.error(f"Token refresh failed: {e}")
+                    print(f"\n❌ Google Calendar token has expired and cannot be refreshed.")
+                    print(f"This usually happens when the token has been expired for too long.")
+                    print(f"Current token file: {self.token_file}")
+                    
+                    while True:
+                        choice = input("\nWould you like to remove the expired token and re-authenticate? (y/n): ").strip().lower()
+                        if choice in ['y', 'yes']:
+                            try:
+                                os.remove(self.token_file)
+                                print(f"✅ Removed expired token file: {self.token_file}")
+                                print("🔄 Starting fresh authentication...")
+                                creds = None
+                                break
+                            except Exception as remove_error:
+                                logger.error(f"Error removing token file: {remove_error}")
+                                print(f"❌ Could not remove token file. Please manually delete: {self.token_file}")
+                                return None
+                        elif choice in ['n', 'no']:
+                            print("❌ Authentication cancelled. Cannot proceed without valid credentials.")
+                            return None
+                        else:
+                            print("Please enter 'y' or 'n'")
+            
+            # If we still don't have valid credentials, initiate fresh authentication
+            if not creds or not creds.valid:
+                try:
+                    flow = InstalledAppFlow.from_client_secrets_file(
+                        self.calendar_credentials_file, self.calendar_scopes)
+                    creds = flow.run_local_server(port=0)
+                except Exception as e:
+                    logger.error(f"Authentication failed: {e}")
+                    print(f"\n❌ Google Calendar authentication failed.")
+                    print(f"Please ensure your credentials.json file is valid and try again.")
+                    return None
             
             # Save credentials for next run
-            with open(self.token_file, 'w') as token:
-                token.write(creds.to_json())
+            try:
+                with open(self.token_file, 'w') as token:
+                    token.write(creds.to_json())
+                logger.info(f"✅ Saved new authentication token to: {self.token_file}")
+            except Exception as e:
+                logger.error(f"Error saving token file: {e}")
+                print(f"❌ Could not save authentication token. You may need to re-authenticate next time.")
         
-        return build('calendar', 'v3', credentials=creds)
+        try:
+            return build('calendar', 'v3', credentials=creds)
+        except Exception as e:
+            logger.error(f"Error building calendar service: {e}")
+            print(f"❌ Failed to initialize Google Calendar service.")
+            return None
     
     def generate_meeting_id(self, customer_email, start_time, summary):
         """Generate a unique identifier for a meeting"""
@@ -931,10 +980,15 @@ def main():
     print()
     
     # Initialize the automation
-    invoicer = StripeCalendarInvoicer(
-        stripe_api_key=STRIPE_API_KEY,
-        days_back=DAYS_BACK
-    )
+    try:
+        invoicer = StripeCalendarInvoicer(
+            stripe_api_key=STRIPE_API_KEY,
+            days_back=DAYS_BACK
+        )
+    except Exception as e:
+        logger.error(f"Failed to initialize automation: {e}")
+        print(f"\n❌ Initialization failed: {e}")
+        return
     
     # OPTIONAL: Set customer-specific hourly rates (uncomment and modify as needed)
     # invoicer.set_customer_hourly_rate("cus_ABC123", 200.00)  # Premium client

@@ -281,3 +281,5 @@ class TestGoogleCalendarIntegration:
         assert len(charlie_data['meetings']) == 1
         assert charlie_data['meetings'][0]['summary'] == 'Quick Check-in'
         assert charlie_data['meetings'][0]['duration'] == 0.5
+
+

@@ -77,6 +77,11 @@ Tests individual functions in isolation:
 - `test_get_customer_hourly_rate` - Rate retrieval with fallbacks
 - `test_check_meeting_invoice_status` - Invoice status checking
 
+#### Authentication Functions
+- `test_get_calendar_service_*` - Various authentication scenarios
+- `test_token_refresh_*` - Token refresh success and failure cases
+- `test_authentication_failure_*` - Error handling during auth flow
+
 #### Data Structures
 - `test_meeting_initialization` - Meeting object structure
 - `test_edited_meeting_values` - Override value handling
@@ -95,8 +100,10 @@ Tests interactions with external services (mocked):
 #### Google Calendar Integration
 - Event fetching within date ranges
 - Meeting-to-customer matching
-- OAuth token handling
+- OAuth token handling and refresh
+- Token expiration and re-authentication flow
 - Error recovery scenarios
+- Authentication failure handling
 
 ### 3. Command Tests (`test_commands.py`)
 
@@ -129,6 +136,8 @@ Tests complete workflows:
 - All meetings already invoiced
 - API failures and recovery
 - Invalid data handling
+- Authentication token expiration during runtime
+- Network connectivity issues
 
 ## Test Data
 
@@ -160,6 +169,7 @@ open htmlcov/index.html
 - Overall coverage: >80%
 - Critical paths: 100%
 - Error handling: >90%
+- Authentication flows: 100%
 
 ## Test Markers
 

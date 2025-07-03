@@ -3,6 +3,10 @@ Unit tests for invoice automation parsing and utility functions
 """
 import pytest
 from datetime import datetime, time
+from unittest.mock import Mock, patch, MagicMock
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
+from google.auth.exceptions import RefreshError
 from invoice_automation import StripeCalendarInvoicer
 
 
@@ -291,3 +295,5 @@ class TestMeetingDataStructure:
         custom_rate = sample_edited_meeting['custom_rate']
         amount = edited_duration * custom_rate
         assert amount == 625.0  # 2.5 hours * $250
+
+
