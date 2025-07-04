@@ -2,26 +2,183 @@
 
 🚀 **Automate your meeting-based invoicing workflow with Google Calendar and Stripe integration**
 
-This Python script automatically identifies meetings with your Stripe customers, tracks which meetings have already been invoiced, and creates detailed draft invoices with custom synopses for each meeting.
+Transform your consulting workflow by automatically identifying meetings with Stripe customers, tracking invoicing status, and creating detailed draft invoices with custom synopses.
 
-## ✨ Features
+## 📖 Table of Contents
 
-- **📅 Calendar Integration**: Automatically fetches meetings from Google Calendar with robust authentication handling
-- **🔐 Smart Token Management**: Automatically handles token expiration with user-friendly re-authentication prompts
-- **👥 Customer Matching**: Cross-references meeting attendees with your Stripe customer list
-- **💰 Flexible Pricing**: Support for different hourly rates per customer (stored in Stripe metadata)
-- **🔍 Duplicate Prevention**: Tracks which meetings have already been invoiced to prevent double-billing
-- **🎯 Interactive Selection**: Visual interface to select which meetings to invoice
-- **📝 Custom Synopses**: Add personalized descriptions for each meeting on the invoice
-- **📊 Status Tracking**: Shows if meetings are uninvoiced, drafted, or already sent
-- **⏱️ Duration-Based Billing**: Automatically calculates meeting duration and invoice amounts
-- **✏️ Meeting Time/Duration Override**: Edit meeting start times and durations if actual differs from scheduled
-- **💵 Per-Meeting Rate Override**: Set custom rates for specific meetings
-- **🔄 Customer Rate Management**: Update customer default rates during invoicing workflow
+- [Quick Start](#-quick-start)
+- [Key Features](#-key-features)
+- [Installation](#-installation)
+- [Setup Guide](#-setup-guide)
+- [Basic Usage](#-basic-usage)
+- [Interactive Workflow](#-interactive-workflow)
+- [Advanced Features](#-advanced-features)
+- [Testing & Development](#-testing--development)
+- [Troubleshooting](#-troubleshooting)
+- [Security & Best Practices](#-security--best-practices)
+- [Contributing](#-contributing)
+
+## ⚡ Quick Start
+
+Get up and running in 5 minutes:
+
+1. **Install dependencies:**
+   ```bash
+   pip install stripe google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client python-dateutil
+   ```
+
+2. **Set your Stripe API key:**
+   ```bash
+   # Option A: .env file (recommended)
+   echo "STRIPE_SECRET_KEY=sk_test_..." > .env
+   
+   # Option B: Environment variable
+   export STRIPE_SECRET_KEY="sk_test_..."
+   ```
+
+3. **Get Google Calendar credentials:**
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Enable Calendar API → Create OAuth credentials → Download as `credentials.json`
+
+4. **Run the automation:**
+   ```bash
+   python invoice_automation.py
+   ```
+
+That's it! The script will guide you through Google authentication and show your meetings ready for invoicing.
+
+## ✨ Key Features
+
+### 🎯 **Core Automation**
+- **Smart Calendar Integration**: Automatically fetches meetings with robust token management
+- **Customer Matching**: Cross-references attendees with your Stripe customer list
+- **Duplicate Prevention**: Tracks invoiced meetings to prevent double-billing
+- **Flexible Pricing**: Different hourly rates per customer (stored in Stripe metadata)
+
+### 🖥️ **Interactive Experience**
+- **Visual Meeting Selection**: Clear status indicators (⭕ uninvoiced, 📄 drafted, ✅ sent)
+- **Meeting Editing**: Adjust start times and durations if actual differs from scheduled
+- **Custom Rate Override**: Set special rates for specific meetings or update customer defaults
+- **Personalized Synopses**: Add custom descriptions for each meeting on invoices
+
+### 🔐 **Reliability & Security**
+- **Smart Token Management**: Handles Google OAuth expiration with user-friendly prompts
+- **Comprehensive Testing**: 66 tests with 75% code coverage
+- **Error Recovery**: Graceful handling of API failures and authentication issues
+
+## 🛠️ Installation
+
+### Prerequisites
+- Python 3.7+
+- Stripe account with API access
+- Google account with Calendar API access
+
+### Install Dependencies
+```bash
+# Option 1: Direct installation
+pip install stripe google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client python-dateutil
+
+# Option 2: From requirements file (if available)
+pip install -r requirements.txt
+```
+
+## ⚙️ Setup Guide
+
+### 1. Stripe API Configuration
+
+**Get your API key:**
+1. Visit [Stripe Dashboard → API Keys](https://dashboard.stripe.com/apikeys)
+2. Copy your Secret Key (starts with `sk_test_` or `sk_live_`)
+3. **Configure environment variables** (choose one method):
+
+   **Option A: .env file (recommended)**
+   ```bash
+   # Create .env file in project directory
+   echo "STRIPE_SECRET_KEY=sk_test_your_actual_key_here" > .env
+   echo "DEFAULT_HOURLY_RATE=150.00" >> .env
+   echo "DAYS_BACK=7" >> .env
+   ```
+
+   **Option B: Shell environment**
+   ```bash
+   export STRIPE_SECRET_KEY="sk_test_your_actual_key_here"
+   export DEFAULT_HOURLY_RATE="150.00"
+   export DAYS_BACK="7"
+   ```
+
+**Optional: Set up customer hourly rates**
+- **Via Stripe Dashboard**: Customers → [Customer] → Edit → Add metadata: `hourly_rate` = `200.00`
+- **Programmatically**: Use `invoicer.set_customer_hourly_rate("cus_ABC123", 200.00)` in the script
+
+### 2. Google Calendar API Setup
+
+1. **Enable the API:**
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create/select a project → Enable Google Calendar API
+
+2. **Create OAuth credentials:**
+   - Go to Credentials → Create → OAuth 2.0 Client ID
+   - Choose "Desktop application"
+   - Download the JSON file
+
+3. **Install credentials:**
+   - Rename downloaded file to `credentials.json`
+   - Place in your script directory
+
+### 3. Configuration Options
+
+The script automatically loads configuration from environment variables or a `.env` file:
+
+**Environment Variables:**
+- `STRIPE_SECRET_KEY` - Your Stripe secret API key (required)
+- `DEFAULT_HOURLY_RATE` - Default hourly rate for customers without specific rates (default: 150.00)
+- `DAYS_BACK` - Number of days back to check for meetings (default: 7)
+
+**Using .env file (recommended):**
+```env
+# .env file in project directory
+STRIPE_SECRET_KEY=sk_test_your_actual_key_here
+DEFAULT_HOURLY_RATE=150.00
+DAYS_BACK=7
+```
+
+**Manual configuration in code:**
+```python
+# Edit these settings in main() function if not using .env
+STRIPE_API_KEY = os.getenv('STRIPE_SECRET_KEY')
+DAYS_BACK = int(os.getenv('DAYS_BACK', 7))
+DEFAULT_HOURLY_RATE = float(os.getenv('DEFAULT_HOURLY_RATE', 150.00))
+```
+
+## 🚀 Basic Usage
+
+### First Run
+```bash
+python invoice_automation.py
+```
+
+**What happens:**
+1. Google opens browser for Calendar authentication (first time only)
+2. Script scans for meetings with your Stripe customers
+3. Shows interactive interface for meeting selection
+4. Guides you through synopsis entry
+5. Creates draft invoices in Stripe
+
+### File Structure After Setup
+```
+your-project/
+├── invoice_automation.py
+├── credentials.json          # Google Calendar API credentials
+├── token.json               # Auto-generated OAuth token (don't commit!)
+├── .env                     # Environment variables (don't commit!)
+└── README.md
+```
 
 ## 🖥️ Interactive Workflow
 
 ### 1. Meeting Overview
+The script displays meetings organized by customer with clear status indicators:
+
 ```
 📧 John Smith (john@company.com) - $200/hour
 ------------------------------------------------------------
@@ -39,21 +196,26 @@ This Python script automatically identifies meetings with your Stripe customers,
 - 📄 **Draft created** (invoice drafted but not sent)
 - ✅ **Invoice sent** (already invoiced and sent)
 
-### 2. Meeting Selection & Editing
+### 2. Interactive Commands
 
-**Commands available during selection:**
-- `[number]` - Toggle selection for a meeting
-- `all` - Select all uninvoiced meetings
+**Selection Commands:**
+- `[number]` - Toggle meeting selection
+- `all` - Select all uninvoiced meetings  
 - `none` - Deselect all meetings
-- `edit [number]` - Edit meeting time and duration
-- `time [number]` - Quick shortcut for editing (same as edit)
-- `rate [number] [amount]` - Set custom rate for a specific meeting
-- `setrate [email] [amount]` - Update customer's default hourly rate
 - `continue` - Proceed to synopsis entry
-- `quit` - Exit program
-- `?` - Show help
 
-**Example: Editing a meeting**
+**Editing Commands:**
+- `edit [number]` - Edit meeting time and duration
+- `time [number]` - Quick shortcut for editing
+- `rate [number] [amount]` - Set custom rate for specific meeting
+- `setrate [email] [amount]` - Update customer's default hourly rate
+
+**Help Commands:**
+- `?` - Show command help
+- `quit` - Exit program
+
+### 3. Meeting Editing Example
+
 ```
 Enter command: edit 1
 
@@ -73,136 +235,19 @@ Duration in hours [1.0]: 1.5
 - ✏️ = Meeting time/duration has been edited
 - 💰$X/h = Custom rate applied to meeting
 
-### 3. Synopsis Entry
+### 4. Synopsis Entry & Final Review
+
+After selecting meetings, you'll add custom descriptions:
+
 ```
 📅 Weekly Strategy Review - 2025-06-15 at 2:30 PM ✏️
    Duration: 1.5h
 Synopsis [Weekly Strategy Review]: Discussed Q3 goals and budget planning
-✓ Synopsis saved: Discussed Q3 goals and budget planning
+✓ Synopsis saved
 ```
 
-### 4. Final Confirmation
-Review all selected meetings (including edits and custom rates), rates, and total amounts before creating invoices.
+Then review and confirm before creating invoices:
 
-## 🛠️ Installation
-
-### Prerequisites
-- Python 3.7+
-- Stripe account with API access
-- Google account with Calendar API access
-
-### Install Dependencies
-```bash
-pip install stripe google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client python-dateutil
-```
-
-## ⚙️ Setup
-
-### 1. Stripe API Setup
-1. Get your Stripe Secret Key from the [Stripe Dashboard](https://dashboard.stripe.com/apikeys)
-2. Set environment variable:
-   ```bash
-   export STRIPE_SECRET_KEY="sk_test_..."
-   ```
-
-### 2. Google Calendar API Setup
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select existing one
-3. Enable the Google Calendar API
-4. Create credentials (OAuth 2.0 Client ID)
-5. Download the credentials file as `credentials.json`
-6. Place `credentials.json` in your script directory
-
-### 3. Customer Hourly Rates (Optional)
-Set different hourly rates for different customers in Stripe:
-
-**Option A: Stripe Dashboard**
-1. Go to Customers → Select Customer → Edit
-2. Add metadata: `hourly_rate` = `200.00`
-
-**Option B: Programmatically**
-```python
-# Uncomment and modify in main() function
-invoicer.set_customer_hourly_rate("cus_ABC123", 200.00)  # Premium client
-invoicer.set_customer_hourly_rate("cus_DEF456", 125.00)  # Standard client
-```
-
-## 🚀 Usage
-
-### Basic Usage
-```bash
-python invoice_automation.py
-```
-
-### Configuration Options
-Edit the configuration section in `main()`:
-
-```python
-STRIPE_API_KEY = os.getenv('STRIPE_SECRET_KEY')
-DAYS_BACK = 7  # Look back 7 days for meetings
-DEFAULT_HOURLY_RATE = 150.00  # Default rate for customers without specific rate
-```
-
-### First Run
-1. Google will open a browser window for authentication
-2. Grant calendar read permissions
-3. Credentials will be saved for future runs
-
-## 📋 How It Works
-
-### Meeting Detection
-- Scans Google Calendar for events in the specified date range
-- Matches meeting attendees/organizers with Stripe customer emails
-- Calculates meeting duration from start/end times
-
-### Invoice Status Tracking
-- Generates unique IDs for each meeting (hash of customer + date + title)
-- Scans existing Stripe invoices for meeting IDs in line item descriptions
-- Prevents duplicate invoicing of the same meeting
-
-### Invoice Creation
-Each meeting becomes a separate line item:
-```
-"Discussed Q3 goals and budget planning - 2025-06-15 at 2:00 PM (1.0h @ $200/h) [ID:a1b2c3d4e5f6]"
-```
-
-## 💡 Examples
-
-### Sample Meeting Selection Session with New Features
-```
-📧 John Smith (john@company.com) - $200/hour
-------------------------------------------------------------
- 1. [✓] ⭕ Weekly Strategy Review
-    📅 2025-06-15 at 2:00 PM (1.0h) - $200.00
-    📊 Status: Not invoiced
-
- 2. [ ] ⭕ Project Planning Meeting  
-    📅 2025-06-17 at 10:30 AM (1.0h) - $200.00
-    📊 Status: Not invoiced
-
-Enter command: edit 1
-
-📝 EDITING MEETING: Weekly Strategy Review
-📅 Original: 2025-06-15 at 2:00 PM (1.0h)
-
-Enter new values (press Enter to keep current):
-Start time [2:00 PM]: 2:30 PM
-Duration in hours [1.0]: 1.5
-
-✅ Meeting updated:
-📅 2025-06-15 at 2:30 PM (1.5h)
-✏️ This meeting has been edited
-
-Enter command: rate 2 250
-✓ Set custom rate for meeting #2: $250/hour
-
-Enter command: setrate john@company.com 225
-✓ Updated hourly rate for john@company.com: $225/hour
-
-Enter command: continue
-```
-
-### Sample Invoice Output with Edited Meetings
 ```
 📊 SUMMARY:
    Total Meetings: 2
@@ -217,51 +262,30 @@ Create 2 draft invoices? (y/n): y
 ✅ SUCCESS: Created 2 draft invoices!
 ```
 
-## 🔧 Troubleshooting
+## 🔧 Advanced Features
 
-### Common Issues
+### Meeting Detection Algorithm
+- Scans Google Calendar events in specified date range
+- Matches attendees/organizers with Stripe customer emails
+- Calculates duration from start/end times
+- Generates unique meeting IDs (hash of customer + date + title)
 
-**"No customers found"**
-- Verify your Stripe API key is correct
-- Check that customers in Stripe have email addresses
+### Invoice Status Tracking
+- Scans existing Stripe invoices for meeting IDs in descriptions
+- Prevents duplicate invoicing with persistent tracking
+- Each meeting becomes a line item: `"Description - Date at Time (Duration @ Rate) [ID:abc123]"`
 
-**"No calendar events found"**
-- Verify Google Calendar authentication
-- Check the `DAYS_BACK` setting
-- Ensure you have meetings in the specified date range
-
-**"Error fetching calendar events"**
-- Re-authenticate Google Calendar (delete `token.json`)
-- Check Google Calendar API is enabled in Google Cloud Console
-
-**"Google Calendar token has expired and cannot be refreshed"**
-- This happens when the OAuth token has been expired for too long (usually 6 months of inactivity)
-- The script will prompt you to remove the expired token and re-authenticate
-- Choose 'y' to automatically remove `token.json` and start fresh authentication
-- If you choose 'n', you'll need to manually delete `token.json` and run the script again
-
-**"Failed to initialize Google Calendar service"**
-- Check that `credentials.json` exists and is valid
-- Ensure Google Calendar API is enabled in your Google Cloud project
-- Verify your OAuth 2.0 credentials are configured for a desktop application
-- Try downloading fresh credentials from Google Cloud Console
-
-**Missing customer hourly rates**
-- The script will use `DEFAULT_HOURLY_RATE` for customers without metadata
-- Set customer-specific rates in Stripe metadata: `hourly_rate` = `200.00`
-
-### File Structure
-```
-your-project/
-├── invoice_automation.py
-├── credentials.json          # Google Calendar API credentials
-├── token.json               # Auto-generated Google OAuth token
-└── README.md
+### Customer Rate Management
+Set rates programmatically:
+```python
+invoicer = StripeCalendarInvoicer(stripe_api_key="sk_...")
+invoicer.set_customer_hourly_rate("cus_ABC123", 200.00)  # Premium client
+invoicer.set_customer_hourly_rate("cus_DEF456", 125.00)  # Standard client
 ```
 
-## 🧪 Testing
+## 🧪 Testing & Development
 
-The project includes a comprehensive test suite with 48 tests covering all functionality.
+The project includes comprehensive testing with **66 tests** achieving **75% code coverage**.
 
 ### Running Tests
 
@@ -279,133 +303,117 @@ python run_tests.py commands    # Interactive command tests
 python run_tests.py e2e        # End-to-end workflow tests
 ```
 
-### Test Coverage
-- **48 tests** with **70%+ code coverage**
-- Unit tests for parsing, validation, and core logic
-- Integration tests with mocked external services
-- Command tests for all interactive features
-- End-to-end tests for complete workflows
+### Test Coverage Areas
+- **Authentication Logic**: Token handling, expiration, refresh failures
+- **Display Formatting**: Visual indicators, time formatting, error fallbacks  
+- **Input Validation**: Command parsing, malformed inputs, edge cases
+- **Core Business Logic**: Meeting detection, invoice creation, rate management
+- **Integration Testing**: Mocked Stripe and Google Calendar API interactions
+- **End-to-End Workflows**: Complete user scenarios with error recovery
 
 See [TESTING.md](TESTING.md) for detailed testing documentation.
 
-## 🎯 Best Practices
+## 🔧 Troubleshooting
 
-1. **Test First**: Run the script in a test environment before production
-2. **Review Drafts**: Always review draft invoices in Stripe before sending
-3. **Regular Backups**: Keep backups of your `credentials.json` and customer rate data
-4. **Rate Management**: Use Stripe metadata for customer-specific rates rather than hardcoding
-5. **Meeting Names**: Use descriptive meeting titles in Google Calendar for better synopses
-6. **Time Accuracy**: Use the edit feature to correct meeting times that ran longer/shorter than scheduled
+### Authentication Issues
 
-## 🔒 Security Notes
+**❌ "Google Calendar token has expired and cannot be refreshed"**
+- Happens after ~6 months of token inactivity
+- Script prompts to remove expired token automatically
+- Choose 'y' to delete `token.json` and re-authenticate
+- Or manually delete `token.json` and run script again
 
-- Never commit `credentials.json` or `token.json` to version control
-- Use environment variables for sensitive API keys
-- Stripe API keys should be kept secure and rotated regularly
-- The script only requires read access to Google Calendar
-- Authentication tokens are automatically managed with graceful expiration handling
-- Expired tokens prompt for user consent before removal and re-authentication
+**❌ "Failed to initialize Google Calendar service"**
+- Check `credentials.json` exists and is valid
+- Ensure Calendar API is enabled in Google Cloud Console
+- Verify OAuth credentials are for "Desktop application"
+- Try downloading fresh credentials from Google Cloud
 
-## 📄 License
+### Data Issues
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+**❌ "No customers found"**
+- Verify Stripe API key is correct and has read permissions
+- Check customers in Stripe have email addresses
+- Ensure you're using the right API key (test vs live)
+
+**❌ "No calendar events found"**
+- Check `DAYS_BACK` setting (default: 7 days)
+- Verify you have meetings in the specified date range
+- Ensure meeting attendees match Stripe customer emails
+
+**❌ "Missing customer hourly rates"**
+- Script uses `DEFAULT_HOURLY_RATE` for customers without metadata
+- Set rates in Stripe: Customer → Edit → Metadata: `hourly_rate` = `200.00`
+- Or use `setrate` command during meeting selection
+
+### Technical Issues
+
+**❌ "Error fetching calendar events"**
+- Re-authenticate by deleting `token.json`
+- Check Google Calendar API quotas in Cloud Console
+- Verify internet connection and firewall settings
+
+**❌ "Stripe API errors"**
+- Check API key permissions and rate limits
+- Verify customer IDs are valid
+- Review Stripe Dashboard for additional error details
+
+## 🔒 Security & Best Practices
+
+### Security Guidelines
+- **Never commit** `credentials.json` or `token.json` to version control
+- **Use environment variables** for Stripe API keys
+- **Rotate API keys** regularly and use test keys during development
+- **Grant minimal permissions**: Script only needs Calendar read access
+- **Review draft invoices** in Stripe before sending to customers
+
+### Recommended Practices
+1. **Test First**: Run in test environment before production use
+2. **Backup Credentials**: Keep secure backups of `credentials.json`
+3. **Descriptive Meetings**: Use clear meeting titles for better synopses
+4. **Time Accuracy**: Use edit feature for meetings that ran over/under scheduled time
+5. **Rate Management**: Store rates in Stripe metadata rather than hardcoding
+6. **Regular Reviews**: Check invoice drafts before sending to customers
+
+### File Security
+```bash
+# Add to .gitignore
+credentials.json
+token.json
+.env
+```
 
 ## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+3. Run tests to ensure nothing breaks (`python run_tests.py all`)
+4. Commit your changes (`git commit -m 'Add amazing feature'`)
+5. Push to the branch (`git push origin feature/amazing-feature`)
+6. Open a Pull Request
+
+### Development Setup
+```bash
+# Install dev dependencies
+pip install -r test_requirements.txt
+
+# Run tests before committing
+python run_tests.py all --coverage
+
+# Check coverage is maintained
+# Target: 75%+ coverage
+```
 
 ## 📞 Support
 
 If you encounter issues:
-1. Check the troubleshooting section above
-2. Review Stripe and Google Calendar API documentation
-3. Open an issue with detailed error logs
+
+1. **Check troubleshooting section** above for common solutions
+2. **Review logs** - the script provides detailed error messages
+3. **Verify setup** - ensure API keys and credentials are correct
+4. **Consult documentation** - [Stripe API](https://stripe.com/docs/api) and [Google Calendar API](https://developers.google.com/calendar)
+5. **Open an issue** with detailed error logs and setup information
 
 ---
 
-**⚡ Happy Invoicing!** This script can save hours of manual invoice creation while ensuring nothing falls through the cracks.
-
-## Setup Instructions
-
-### 1. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Environment Configuration
-
-Copy the environment template and configure your settings:
-
-```bash
-cp config.env.template .env
-```
-
-Edit `.env` file with your actual values:
-
-```env
-# Stripe Configuration
-STRIPE_SECRET_KEY=sk_test_your_actual_stripe_secret_key_here
-
-# Invoice Settings  
-DEFAULT_HOURLY_RATE=150.00
-DAYS_BACK=7
-```
-
-**Environment Variables:**
-- `STRIPE_SECRET_KEY` - Your Stripe secret API key (required)
-- `DEFAULT_HOURLY_RATE` - Default hourly rate for customers without specific rates (default: 150.00)
-- `DAYS_BACK` - Number of days back to check for meetings (default: 7)
-
-### 3. Google Calendar Setup
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select existing one
-3. Enable the Google Calendar API
-4. Create credentials (OAuth 2.0 Client ID) for a desktop application
-5. Download the credentials JSON file and save it as `credentials.json` in the project directory
-
-### 4. Stripe Customer Setup
-
-Set customer hourly rates in Stripe:
-- Go to Stripe Dashboard > Customers > [Customer] > Edit
-- Add metadata: key="hourly_rate", value="200.00"
-- Or use the `set_customer_hourly_rate()` method in the script
-
-For customers without a specific rate, the `DEFAULT_HOURLY_RATE` will be used.
-
-## Usage
-
-Run the automation:
-
-```bash
-python invoice_automation.py
-```
-
-The script will:
-1. Load your environment variables from `.env`
-2. Authenticate with Google Calendar (browser will open on first run)
-3. Fetch customers from Stripe
-4. Find recent meetings and show interactive selection interface
-5. Allow you to enter custom synopses for each meeting
-6. Create draft invoices in Stripe
-
-## Example: Setting Customer Rates Programmatically
-
-```python
-invoicer = StripeCalendarInvoicer(stripe_api_key="sk_...")
-invoicer.set_customer_hourly_rate("cus_ABC123", 200.00)  # $200/hour for premium client
-invoicer.set_customer_hourly_rate("cus_DEF456", 125.00)  # $125/hour for standard client
-invoicer.set_customer_hourly_rate("cus_GHI789", 300.00)  # $300/hour for enterprise client
-```
-
-## Security Notes
-
-- Your `.env` file is automatically ignored by git (included in `.gitignore`)
-- Never commit your actual Stripe API keys to version control
-- Use test keys during development
-- The `credentials.json` file is also gitignored for security
+**⚡ Happy Invoicing!** This automation can save hours of manual work while ensuring accurate billing and nothing falls through the cracks.
