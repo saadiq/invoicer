@@ -297,3 +297,284 @@ class TestMeetingDataStructure:
         assert amount == 625.0  # 2.5 hours * $250
 
 
+class TestAuthenticationLogic:
+    """Test Google Calendar authentication logic and error handling"""
+    
+    def test_authentication_service_failure_initialization(self, mocker):
+        """Test that authentication service failure raises proper exception"""
+        from invoice_automation import StripeCalendarInvoicer
+        
+        # Mock _get_calendar_service to return None (failure)
+        mocker.patch.object(StripeCalendarInvoicer, '_get_calendar_service', return_value=None)
+        
+        # Should raise exception when calendar service fails to initialize
+        with pytest.raises(Exception, match="Failed to initialize Google Calendar service"):
+            StripeCalendarInvoicer('test_key')
+    
+    def test_token_file_loading_error_handling(self, mocker):
+        """Test handling of corrupted or invalid token files"""
+        from invoice_automation import StripeCalendarInvoicer
+        
+        # Create invoicer instance without calling constructor
+        invoicer = StripeCalendarInvoicer.__new__(StripeCalendarInvoicer)
+        invoicer.token_file = 'test_token.json'
+        invoicer.calendar_scopes = ['test_scope']
+        invoicer.calendar_credentials_file = 'test_credentials.json'
+        
+        # Mock file existence but credential loading failure
+        mocker.patch('os.path.exists', return_value=True)
+        mocker.patch('google.oauth2.credentials.Credentials.from_authorized_user_file', 
+                    side_effect=Exception("Corrupted token file"))
+        
+        # Mock successful fresh authentication
+        mock_creds = Mock()
+        mock_creds.valid = True
+        mock_creds.to_json.return_value = '{"token": "data"}'
+        
+        mock_flow = Mock()
+        mock_flow.run_local_server.return_value = mock_creds
+        mocker.patch('google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file', 
+                    return_value=mock_flow)
+        
+        mock_service = Mock()
+        mocker.patch('invoice_automation.build', return_value=mock_service)
+        mock_open = mocker.patch('builtins.open', mocker.mock_open())
+        
+        # Should handle corrupted token and proceed with fresh auth
+        result = invoicer._get_calendar_service()
+        
+        # Verify fresh authentication was performed
+        mock_flow.run_local_server.assert_called_once()
+        assert result == mock_service
+    
+    @pytest.mark.parametrize("user_choice,expected_removed", [
+        ('y', True),
+        ('yes', True), 
+        ('n', False),
+        ('no', False)
+    ])
+    def test_token_expiration_user_choice_handling(self, mocker, user_choice, expected_removed):
+        """Test user choice handling when token refresh fails"""
+        from invoice_automation import StripeCalendarInvoicer
+        
+        invoicer = StripeCalendarInvoicer.__new__(StripeCalendarInvoicer)
+        invoicer.token_file = 'test_token.json'
+        invoicer.calendar_scopes = ['test_scope']
+        invoicer.calendar_credentials_file = 'test_credentials.json'
+        
+        # Mock file exists and expired credentials
+        mocker.patch('os.path.exists', return_value=True)
+        
+        mock_creds = Mock()
+        mock_creds.valid = False
+        mock_creds.expired = True
+        mock_creds.refresh_token = 'refresh_token'
+        mocker.patch('google.oauth2.credentials.Credentials.from_authorized_user_file', 
+                    return_value=mock_creds)
+        
+        # Mock failed refresh
+        mock_creds.refresh.side_effect = RefreshError("Token expired")
+        mock_request = Mock()
+        mocker.patch('google.auth.transport.requests.Request', return_value=mock_request)
+        
+        # Mock user input
+        mocker.patch('builtins.input', return_value=user_choice)
+        mocker.patch('builtins.print')  # Suppress output
+        
+        # Mock file removal
+        mock_remove = mocker.patch('os.remove')
+        
+        if expected_removed:
+            # Mock successful fresh authentication
+            mock_new_creds = Mock()
+            mock_new_creds.valid = True
+            mock_new_creds.to_json.return_value = '{"new": "token"}'
+            
+            mock_flow = Mock()
+            mock_flow.run_local_server.return_value = mock_new_creds
+            mocker.patch('google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file', 
+                        return_value=mock_flow)
+            
+            mock_service = Mock()
+            mocker.patch('invoice_automation.build', return_value=mock_service)
+            mock_open = mocker.patch('builtins.open', mocker.mock_open())
+            
+            result = invoicer._get_calendar_service()
+            
+            # Should remove token and proceed with fresh auth
+            mock_remove.assert_called_once_with('test_token.json')
+            mock_flow.run_local_server.assert_called_once()
+            assert result == mock_service
+        else:
+            # Should return None without removing token
+            result = invoicer._get_calendar_service()
+            mock_remove.assert_not_called()
+            assert result is None
+    
+    def test_token_expiration_invalid_user_choice(self, mocker):
+        """Test handling of invalid user input during token expiration"""
+        from invoice_automation import StripeCalendarInvoicer
+        
+        invoicer = StripeCalendarInvoicer.__new__(StripeCalendarInvoicer)
+        invoicer.token_file = 'test_token.json'
+        invoicer.calendar_scopes = ['test_scope']
+        invoicer.calendar_credentials_file = 'test_credentials.json'
+        
+        # Mock expired credentials
+        mocker.patch('os.path.exists', return_value=True)
+        mock_creds = Mock()
+        mock_creds.valid = False
+        mock_creds.expired = True
+        mock_creds.refresh_token = 'refresh_token'
+        mock_creds.refresh.side_effect = RefreshError("Token expired")
+        mocker.patch('google.oauth2.credentials.Credentials.from_authorized_user_file', 
+                    return_value=mock_creds)
+        mocker.patch('google.auth.transport.requests.Request')
+        
+        # Mock invalid input followed by valid input
+        mocker.patch('builtins.input', side_effect=['invalid', 'maybe', 'y'])
+        mock_print = mocker.patch('builtins.print')
+        
+        # Mock successful file removal and fresh auth
+        mocker.patch('os.remove')
+        mock_new_creds = Mock()
+        mock_new_creds.valid = True
+        mock_new_creds.to_json.return_value = '{"new": "token"}'
+        mock_flow = Mock()
+        mock_flow.run_local_server.return_value = mock_new_creds
+        mocker.patch('google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file', 
+                    return_value=mock_flow)
+        mock_service = Mock()
+        mocker.patch('invoice_automation.build', return_value=mock_service)
+        mocker.patch('builtins.open', mocker.mock_open())
+        
+        result = invoicer._get_calendar_service()
+        
+        # Should prompt user multiple times for invalid input
+        assert any("Please enter 'y' or 'n'" in str(call) for call in mock_print.call_args_list)
+        assert result == mock_service
+    
+    def test_token_file_removal_error(self, mocker):
+        """Test handling of file removal errors during token expiration"""
+        from invoice_automation import StripeCalendarInvoicer
+        
+        invoicer = StripeCalendarInvoicer.__new__(StripeCalendarInvoicer)
+        invoicer.token_file = 'test_token.json'
+        invoicer.calendar_scopes = ['test_scope']
+        invoicer.calendar_credentials_file = 'test_credentials.json'
+        
+        # Mock expired credentials and user accepting removal
+        mocker.patch('os.path.exists', return_value=True)
+        mock_creds = Mock()
+        mock_creds.valid = False
+        mock_creds.expired = True
+        mock_creds.refresh_token = 'refresh_token'
+        mock_creds.refresh.side_effect = RefreshError("Token expired")
+        mocker.patch('google.oauth2.credentials.Credentials.from_authorized_user_file', 
+                    return_value=mock_creds)
+        mocker.patch('google.auth.transport.requests.Request')
+        mocker.patch('builtins.input', return_value='y')
+        mock_print = mocker.patch('builtins.print')
+        
+        # Mock file removal failure
+        mocker.patch('os.remove', side_effect=OSError("Permission denied"))
+        
+        result = invoicer._get_calendar_service()
+        
+        # Should handle file removal error gracefully
+        assert any("Could not remove token file" in str(call) for call in mock_print.call_args_list)
+        assert result is None
+    
+    def test_fresh_authentication_failure(self, mocker):
+        """Test handling of fresh authentication failures"""
+        from invoice_automation import StripeCalendarInvoicer
+        
+        invoicer = StripeCalendarInvoicer.__new__(StripeCalendarInvoicer)
+        invoicer.token_file = 'test_token.json'
+        invoicer.calendar_scopes = ['test_scope']
+        invoicer.calendar_credentials_file = 'test_credentials.json'
+        
+        # Mock no existing token
+        mocker.patch('os.path.exists', return_value=False)
+        
+        # Mock authentication flow failure
+        mock_flow = Mock()
+        mock_flow.run_local_server.side_effect = Exception("Authentication failed")
+        mocker.patch('google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file', 
+                    return_value=mock_flow)
+        mock_print = mocker.patch('builtins.print')
+        
+        result = invoicer._get_calendar_service()
+        
+        # Should handle auth failure gracefully
+        assert any("Google Calendar authentication failed" in str(call) for call in mock_print.call_args_list)
+        assert result is None
+    
+    def test_token_save_failure(self, mocker):
+        """Test handling of token save failures"""
+        from invoice_automation import StripeCalendarInvoicer
+        
+        invoicer = StripeCalendarInvoicer.__new__(StripeCalendarInvoicer)
+        invoicer.token_file = 'test_token.json'
+        invoicer.calendar_scopes = ['test_scope']
+        invoicer.calendar_credentials_file = 'test_credentials.json'
+        
+        # Mock no existing token and successful auth
+        mocker.patch('os.path.exists', return_value=False)
+        
+        mock_creds = Mock()
+        mock_creds.valid = True
+        mock_creds.to_json.return_value = '{"token": "data"}'
+        
+        mock_flow = Mock()
+        mock_flow.run_local_server.return_value = mock_creds
+        mocker.patch('google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file', 
+                    return_value=mock_flow)
+        
+        mock_service = Mock()
+        mocker.patch('invoice_automation.build', return_value=mock_service)
+        
+        # Mock file save failure
+        mocker.patch('builtins.open', side_effect=OSError("Disk full"))
+        mock_print = mocker.patch('builtins.print')
+        
+        result = invoicer._get_calendar_service()
+        
+        # Should handle save failure but still return service
+        assert any("Could not save authentication token" in str(call) for call in mock_print.call_args_list)
+        assert result == mock_service
+    
+    def test_calendar_service_build_failure(self, mocker):
+        """Test handling of calendar service build failures"""
+        from invoice_automation import StripeCalendarInvoicer
+        
+        invoicer = StripeCalendarInvoicer.__new__(StripeCalendarInvoicer)
+        invoicer.token_file = 'test_token.json'
+        invoicer.calendar_scopes = ['test_scope']
+        invoicer.calendar_credentials_file = 'test_credentials.json'
+        
+        # Mock successful authentication but service build failure
+        mocker.patch('os.path.exists', return_value=False)
+        
+        mock_creds = Mock()
+        mock_creds.valid = True
+        mock_creds.to_json.return_value = '{"token": "data"}'
+        
+        mock_flow = Mock()
+        mock_flow.run_local_server.return_value = mock_creds
+        mocker.patch('google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file', 
+                    return_value=mock_flow)
+        
+        mocker.patch('builtins.open', mocker.mock_open())
+        
+        # Mock calendar service build failure
+        mocker.patch('invoice_automation.build', side_effect=Exception("Service build failed"))
+        mock_print = mocker.patch('builtins.print')
+        
+        result = invoicer._get_calendar_service()
+        
+        # Should handle service build failure
+        assert any("Failed to initialize Google Calendar service" in str(call) for call in mock_print.call_args_list)
+        assert result is None
+
+
