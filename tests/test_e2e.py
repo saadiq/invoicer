@@ -42,7 +42,7 @@ class TestEndToEndScenarios:
         mocker.patch.object(test_invoicer, 'check_meeting_invoice_status', return_value='not_invoiced')
         
         # Find customers with meetings
-        customers_with_meetings = test_invoicer.find_customers_with_meetings([customer], calendar_events)
+        customers_with_meetings, _ = test_invoicer.find_customers_with_meetings([customer], calendar_events)
         
         # Verify meetings found
         assert len(customers_with_meetings) == 1
@@ -107,7 +107,7 @@ class TestEndToEndScenarios:
         mocker.patch.object(test_invoicer, 'check_meeting_invoice_status', return_value='not_invoiced')
         
         # Find meetings
-        customers_with_meetings = test_invoicer.find_customers_with_meetings([customer], [calendar_event])
+        customers_with_meetings, _ = test_invoicer.find_customers_with_meetings([customer], [calendar_event])
         meeting = customers_with_meetings['cus_BOB']['meetings'][0]
         
         # Simulate editing the meeting
@@ -174,7 +174,7 @@ class TestEndToEndScenarios:
         mocker.patch.object(test_invoicer, 'check_meeting_invoice_status', return_value='not_invoiced')
         
         # Find meetings
-        customers_with_meetings = test_invoicer.find_customers_with_meetings([customer], calendar_events)
+        customers_with_meetings, _ = test_invoicer.find_customers_with_meetings([customer], calendar_events)
         meetings = customers_with_meetings['cus_CHARLIE']['meetings']
         
         # Simulate setting custom rates
@@ -231,7 +231,7 @@ class TestEndToEndScenarios:
         mock_customer_modify = mocker.patch('stripe.Customer.modify')
         
         # Find meetings
-        customers_with_meetings = test_invoicer.find_customers_with_meetings([customer], [calendar_event])
+        customers_with_meetings, _ = test_invoicer.find_customers_with_meetings([customer], [calendar_event])
         
         # Simulate updating customer rate
         mock_input = mocker.patch('builtins.input')
@@ -260,7 +260,7 @@ class TestEndToEndScenarios:
         }
         
         # Find meetings with empty events
-        customers_with_meetings = test_invoicer.find_customers_with_meetings([customer], [])
+        customers_with_meetings, _ = test_invoicer.find_customers_with_meetings([customer], [])
         
         # Should return empty dict
         assert customers_with_meetings == {}
@@ -286,7 +286,7 @@ class TestEndToEndScenarios:
         mocker.patch.object(test_invoicer, 'check_meeting_invoice_status', return_value='sent')
         
         # Find meetings
-        customers_with_meetings = test_invoicer.find_customers_with_meetings([customer], [calendar_event])
+        customers_with_meetings, _ = test_invoicer.find_customers_with_meetings([customer], [calendar_event])
         
         # Should find the meeting but it should not be selected
         assert len(customers_with_meetings) == 1
@@ -313,5 +313,5 @@ class TestEndToEndScenarios:
         }
         
         # Test with empty events (simulating calendar fetch failure)
-        customers_with_meetings = test_invoicer.find_customers_with_meetings([customer], [])
+        customers_with_meetings, _ = test_invoicer.find_customers_with_meetings([customer], [])
         assert customers_with_meetings == {}

@@ -690,3 +690,72 @@ class TestDescriptionParsing:
         assert found == set()  # Requires both name and email
 
 
+class TestCustomerSearch:
+    """Test customer search functionality"""
+    
+    def test_search_customers_by_email(self, test_invoicer):
+        """Test searching customers by email"""
+        customers = [
+            {'id': 'cus_1', 'email': 'alice@company.com', 'name': 'Alice Johnson'},
+            {'id': 'cus_2', 'email': 'bob@startup.io', 'name': 'Bob Smith'},
+            {'id': 'cus_3', 'email': 'charlie@enterprise.net', 'name': 'Charlie Davis'}
+        ]
+        
+        # Search by partial email
+        matches = test_invoicer.search_customers(customers, 'startup')
+        assert len(matches) == 1
+        assert matches[0]['email'] == 'bob@startup.io'
+        
+        # Search by full email
+        matches = test_invoicer.search_customers(customers, 'alice@company.com')
+        assert len(matches) == 1
+        assert matches[0]['name'] == 'Alice Johnson'
+        
+        # Search with no matches
+        matches = test_invoicer.search_customers(customers, 'nonexistent')
+        assert len(matches) == 0
+    
+    def test_search_customers_by_name(self, test_invoicer):
+        """Test searching customers by name"""
+        customers = [
+            {'id': 'cus_1', 'email': 'alice@company.com', 'name': 'Alice Johnson'},
+            {'id': 'cus_2', 'email': 'bob@startup.io', 'name': 'Bob Smith'},
+            {'id': 'cus_3', 'email': 'charlie@enterprise.net', 'name': 'Charlie Davis'}
+        ]
+        
+        # Search by partial name
+        matches = test_invoicer.search_customers(customers, 'john')
+        assert len(matches) == 1
+        assert matches[0]['email'] == 'alice@company.com'
+        
+        # Search by last name
+        matches = test_invoicer.search_customers(customers, 'smith')
+        assert len(matches) == 1
+        assert matches[0]['name'] == 'Bob Smith'
+        
+        # Case insensitive search
+        matches = test_invoicer.search_customers(customers, 'ALICE')
+        assert len(matches) == 1
+        assert matches[0]['name'] == 'Alice Johnson'
+    
+    def test_search_customers_edge_cases(self, test_invoicer):
+        """Test search edge cases"""
+        customers = [
+            {'id': 'cus_1', 'email': 'alice@company.com', 'name': 'Alice Johnson'},
+            {'id': 'cus_2', 'email': 'no-name@example.com', 'name': ''},
+        ]
+        
+        # Empty query
+        matches = test_invoicer.search_customers(customers, '')
+        assert len(matches) == 0
+        
+        # None query
+        matches = test_invoicer.search_customers(customers, None)
+        assert len(matches) == 0
+        
+        # Customer with empty name
+        matches = test_invoicer.search_customers(customers, 'no-name')
+        assert len(matches) == 1
+        assert matches[0]['email'] == 'no-name@example.com'
+
+

@@ -256,7 +256,7 @@ class TestGoogleCalendarIntegration:
         )
         
         # Call with customers and events as parameters
-        customers_with_meetings = test_invoicer.find_customers_with_meetings(mock_stripe_customers, mock_calendar_events)
+        customers_with_meetings, _ = test_invoicer.find_customers_with_meetings(mock_stripe_customers, mock_calendar_events)
         
         # Verify we found meetings for the right customers
         assert len(customers_with_meetings) == 3
@@ -320,7 +320,7 @@ class TestGoogleCalendarIntegration:
         mocker.patch.object(test_invoicer, 'check_meeting_invoice_status', return_value='not_invoiced')
         
         # Find customers with meetings
-        result = test_invoicer.find_customers_with_meetings(customers, events)
+        result, _ = test_invoicer.find_customers_with_meetings(customers, events)
         
         # Verify all customers were found via descriptions
         assert len(result) == 3
@@ -362,7 +362,7 @@ class TestGoogleCalendarIntegration:
         
         mocker.patch.object(test_invoicer, 'check_meeting_invoice_status', return_value='not_invoiced')
         
-        result = test_invoicer.find_customers_with_meetings(customers, events)
+        result, _ = test_invoicer.find_customers_with_meetings(customers, events)
         
         # Both customers should be found
         assert len(result) == 2
@@ -391,10 +391,63 @@ class TestGoogleCalendarIntegration:
         
         mocker.patch.object(test_invoicer, 'check_meeting_invoice_status', return_value='not_invoiced')
         
-        result = test_invoicer.find_customers_with_meetings(customers, events)
+        result, _ = test_invoicer.find_customers_with_meetings(customers, events)
         
         # Should still find Alice as attendee
         assert len(result) == 1
         assert result['cus_ALICE']['meetings'][0]['detection_source'] == 'attendee'
+    
+    def test_find_customers_with_unassociated_meetings(self, test_invoicer, mocker):
+        """Test finding unassociated meetings when include_all_meetings is True"""
+        customers = [
+            {'id': 'cus_ALICE', 'email': 'alice@techcorp.com', 'name': 'Alice Johnson', 'metadata': {}}
+        ]
+        
+        events = [
+            {
+                'summary': 'Known Customer Meeting',
+                'start': {'dateTime': '2025-01-15T10:00:00-05:00'},
+                'end': {'dateTime': '2025-01-15T11:00:00-05:00'},
+                'attendees': [{'email': 'alice@techcorp.com'}],
+                'description': ''
+            },
+            {
+                'summary': 'Internal Team Meeting',
+                'start': {'dateTime': '2025-01-16T14:00:00-05:00'},
+                'end': {'dateTime': '2025-01-16T15:00:00-05:00'},
+                'attendees': [{'email': 'team@internal.com'}, {'email': 'colleague@internal.com'}],
+                'description': 'Weekly team sync'
+            },
+            {
+                'summary': 'Unknown Client Call',
+                'start': {'dateTime': '2025-01-17T09:00:00-05:00'},
+                'end': {'dateTime': '2025-01-17T10:00:00-05:00'},
+                'attendees': [{'email': 'prospect@newclient.com'}],
+                'organizer': {'email': 'me@mycompany.com'},
+                'description': 'Initial consultation call'
+            }
+        ]
+        
+        mocker.patch.object(test_invoicer, 'check_meeting_invoice_status', return_value='not_invoiced')
+        
+        # Test with include_all_meetings=False (default)
+        result, unassociated = test_invoicer.find_customers_with_meetings(customers, events, include_all_meetings=False)
+        assert len(result) == 1  # Only Alice's meeting
+        assert len(unassociated) == 0  # No unassociated meetings tracked
+        
+        # Test with include_all_meetings=True
+        result, unassociated = test_invoicer.find_customers_with_meetings(customers, events, include_all_meetings=True)
+        assert len(result) == 1  # Alice's meeting
+        assert len(unassociated) == 2  # Two unassociated meetings
+        
+        # Check unassociated meeting details
+        assert unassociated[0]['summary'] == 'Internal Team Meeting'
+        assert unassociated[0]['duration'] == 1.0
+        assert len(unassociated[0]['attendees']) == 2
+        assert 'team@internal.com' in unassociated[0]['attendees']
+        
+        assert unassociated[1]['summary'] == 'Unknown Client Call'
+        assert unassociated[1]['duration'] == 1.0
+        assert 'prospect@newclient.com' in unassociated[1]['attendees']
 
 

@@ -311,6 +311,31 @@ class StripeCalendarInvoicer:
         
         return found_emails
     
+    def search_customers(self, customers, query):
+        """Search customers by name or email
+        
+        Args:
+            customers: List of customer dictionaries
+            query: Search query string
+            
+        Returns:
+            List of matching customers
+        """
+        if not query:
+            return []
+        
+        query_lower = query.lower()
+        matches = []
+        
+        for customer in customers:
+            customer_email = customer.get('email', '').lower()
+            customer_name = customer.get('name', '').lower()
+            
+            if query_lower in customer_email or query_lower in customer_name:
+                matches.append(customer)
+        
+        return matches
+    
     def get_stripe_customers(self):
         """Fetch all customers from Stripe with email addresses"""
         logger.info("Fetching Stripe customers...")
@@ -380,9 +405,19 @@ class StripeCalendarInvoicer:
         except:
             return 1.0  # Default to 1 hour if calculation fails
     
-    def find_customers_with_meetings(self, customers, events):
-        """Find customers who had meetings and return meeting details with invoice status"""
+    def find_customers_with_meetings(self, customers, events, include_all_meetings=False):
+        """Find customers who had meetings and return meeting details with invoice status
+        
+        Args:
+            customers: List of Stripe customers
+            events: List of calendar events
+            include_all_meetings: If True, also return unassociated meetings
+            
+        Returns:
+            Tuple of (customers_with_meetings, unassociated_meetings)
+        """
         customers_with_meetings = {}
+        unassociated_meetings = []
         
         # Create a mapping of email to customer
         customer_by_email = {customer['email']: customer for customer in customers}
@@ -442,8 +477,10 @@ class StripeCalendarInvoicer:
                         detection_sources[email] = 'description'
             
             # Find matching customers
+            customer_found = False
             for email in participant_emails:
                 if email in customer_by_email:
+                    customer_found = True
                     customer = customer_by_email[email]
                     customer_id = customer['id']
                     
@@ -479,6 +516,28 @@ class StripeCalendarInvoicer:
                         'detection_source': detection_sources.get(email, 'unknown')
                     }
                     customers_with_meetings[customer_id]['meetings'].append(meeting_info)
+            
+            # If no customer found and include_all_meetings is True, add to unassociated list
+            if not customer_found and include_all_meetings:
+                # Generate unique ID for unassociated meeting
+                meeting_id = self.generate_meeting_id('unassociated', start_time, summary)
+                
+                unassociated_meeting = {
+                    'id': meeting_id,
+                    'summary': summary,
+                    'date': meeting_date,
+                    'time': meeting_time,
+                    'duration': duration,
+                    'start_time': start_time,
+                    'end_time': end_time,
+                    'attendees': list(participant_emails),
+                    'description': description[:200] if description else '',  # Truncate long descriptions
+                    'selected': False,
+                    'synopsis': '',
+                    'assigned_customer': None,  # Will be set during assignment
+                    'is_manually_assigned': False
+                }
+                unassociated_meetings.append(unassociated_meeting)
         
         # Log results
         for customer_id, data in customers_with_meetings.items():
@@ -487,7 +546,11 @@ class StripeCalendarInvoicer:
             logger.info(f"Found {meeting_count} meeting(s) for customer: {customer['name']} ({customer['email']})")
         
         logger.info(f"Total customers with recent meetings: {len(customers_with_meetings)}")
-        return customers_with_meetings
+        
+        if include_all_meetings:
+            logger.info(f"Total unassociated meetings: {len(unassociated_meetings)}")
+        
+        return customers_with_meetings, unassociated_meetings
     
     def edit_meeting_details(self, meeting, customer_data):
         """Interactive function to edit meeting start time and duration"""
@@ -571,8 +634,17 @@ class StripeCalendarInvoicer:
         
         return True
     
-    def display_meetings_interactive(self, customers_with_meetings, default_hourly_rate):
-        """Interactive session to select meetings and enter synopses"""
+    def display_meetings_interactive(self, customers_with_meetings, default_hourly_rate, unassociated_meetings=None, all_customers=None):
+        """Interactive session to select meetings and enter synopses
+        
+        Args:
+            customers_with_meetings: Dict of customers with their meetings
+            default_hourly_rate: Default hourly rate
+            unassociated_meetings: List of meetings not associated with any customer
+            all_customers: List of all customers (for assignment)
+        """
+        if unassociated_meetings is None:
+            unassociated_meetings = []
         
         def display_meeting_list():
             """Helper function to display the current meeting list with selection status"""
@@ -583,6 +655,7 @@ class StripeCalendarInvoicer:
             # Display all meetings with status
             meeting_index = 0
             meeting_map = {}  # Map index to (customer_id, meeting_index)
+            unassociated_map = {}  # Map Ux index to unassociated meeting index
             
             for customer_id, data in customers_with_meetings.items():
                 customer = data['customer']
@@ -629,6 +702,8 @@ class StripeCalendarInvoicer:
                         meeting_title += f" 💰${meeting['custom_rate']}/h"
                     if meeting.get('detection_source') == 'description':
                         meeting_title += " 📝"
+                    if meeting.get('is_manually_assigned'):
+                        meeting_title += " 🔗"
                     
                     print(f"{meeting_index:2}. {selected_symbol} {status_symbol} {meeting_title}")
                     print(f"    📅 {meeting['date']} at {display_time} ({display_duration}h) - ${amount:.2f}")
@@ -640,10 +715,45 @@ class StripeCalendarInvoicer:
                     print(f"    📊 Status: {status_text}")
                     print()
             
-            return meeting_map
+            # Display unassociated meetings if any
+            if unassociated_meetings:
+                print(f"\n🔍 UNASSOCIATED MEETINGS ({len(unassociated_meetings)} found)")
+                print("-" * 60)
+                
+                for i, meeting in enumerate(unassociated_meetings):
+                    unassociated_index = f"U{i+1}"
+                    unassociated_map[unassociated_index] = i
+                    
+                    selected_symbol = '[✓]' if meeting['selected'] else '[ ]'
+                    
+                    # Show assigned customer if any
+                    if meeting.get('assigned_customer'):
+                        customer = meeting['assigned_customer']
+                        print(f"{unassociated_index:3}. {selected_symbol} {meeting['summary']} 🔗")
+                        print(f"     📅 {meeting['date']} at {meeting['time']} ({meeting['duration']}h)")
+                        print(f"     👤 Assigned to: {customer['name']} ({customer['email']})")
+                    else:
+                        print(f"{unassociated_index:3}. {selected_symbol} {meeting['summary']}")
+                        print(f"     📅 {meeting['date']} at {meeting['time']} ({meeting['duration']}h)")
+                        
+                        # Show attendees
+                        if meeting['attendees']:
+                            attendee_list = ', '.join(meeting['attendees'][:3])
+                            if len(meeting['attendees']) > 3:
+                                attendee_list += f" (+{len(meeting['attendees']) - 3} more)"
+                            print(f"     👥 Attendees: {attendee_list}")
+                        
+                        # Show description preview if available
+                        if meeting['description']:
+                            desc_preview = meeting['description'][:60] + "..." if len(meeting['description']) > 60 else meeting['description']
+                            print(f"     📝 Description: {desc_preview}")
+                    
+                    print()
+            
+            return meeting_map, unassociated_map
         
         # Initial display
-        meeting_map = display_meeting_list()
+        meeting_map, unassociated_map = display_meeting_list()
         
         # Interactive selection
         def show_commands():
@@ -656,6 +766,14 @@ class StripeCalendarInvoicer:
             print("  'time [number]'               - Quick edit meeting time/duration")
             print("  'rate [number] [amount]'      - Set custom rate for meeting")
             print("  'setrate [email] [amount]'    - Update customer's default rate")
+            
+            if unassociated_meetings:
+                print("\nUnassociated Meeting Commands:")
+                print("  'U[number]'                   - Toggle selection for unassociated meeting")
+                print("  'assign U[number] [email]'    - Assign meeting to customer")
+                print("  'search [query]'              - Search for customer by name or email")
+            
+            print("\nGeneral Commands:")
             print("  'continue'                    - Continue to synopsis entry")
             print("  'quit'                        - Exit program")
             print("  '?'                           - Show this help message")
@@ -663,6 +781,7 @@ class StripeCalendarInvoicer:
             print("  ✏️ = Meeting time/duration edited")
             print("  💰 = Custom rate applied")
             print("  📝 = Customer found in meeting description")
+            print("  🔗 = Manually assigned to customer")
         
         show_commands()
         
@@ -683,14 +802,14 @@ class StripeCalendarInvoicer:
                             meeting['selected'] = True
                 print("✓ Selected all uninvoiced meetings")
                 # Refresh display after change
-                meeting_map = display_meeting_list()
+                meeting_map, unassociated_map = display_meeting_list()
             elif command == 'none':
                 for customer_id, data in customers_with_meetings.items():
                     for meeting in data['meetings']:
                         meeting['selected'] = False
                 print("✓ Deselected all meetings")
                 # Refresh display after change
-                meeting_map = display_meeting_list()
+                meeting_map, unassociated_map = display_meeting_list()
             elif command.isdigit():
                 meeting_num = int(command)
                 if meeting_num in meeting_map:
@@ -704,7 +823,7 @@ class StripeCalendarInvoicer:
                         action = "Selected" if meeting['selected'] else "Deselected"
                         print(f"✓ {action} meeting #{meeting_num}")
                         # Refresh display after change
-                        meeting_map = display_meeting_list()
+                        meeting_map, unassociated_map = display_meeting_list()
                 else:
                     print(f"❌ Invalid meeting number: {meeting_num}")
                     show_commands()
@@ -718,7 +837,7 @@ class StripeCalendarInvoicer:
                         customer_data = customers_with_meetings[customer_id]
                         self.edit_meeting_details(meeting, customer_data)
                         # Refresh display after edit
-                        meeting_map = display_meeting_list()
+                        meeting_map, unassociated_map = display_meeting_list()
                     else:
                         print(f"❌ Invalid meeting number: {meeting_num}")
                 except (ValueError, IndexError):
@@ -734,7 +853,7 @@ class StripeCalendarInvoicer:
                         customer_data = customers_with_meetings[customer_id]
                         self.edit_meeting_details(meeting, customer_data)
                         # Refresh display after edit
-                        meeting_map = display_meeting_list()
+                        meeting_map, unassociated_map = display_meeting_list()
                     else:
                         print(f"❌ Invalid meeting number: {meeting_num}")
                 except (ValueError, IndexError):
@@ -755,7 +874,7 @@ class StripeCalendarInvoicer:
                                 meeting['custom_rate'] = rate
                                 print(f"✓ Set custom rate for meeting #{meeting_num}: ${rate}/hour")
                                 # Refresh display after change
-                                meeting_map = display_meeting_list()
+                                meeting_map, unassociated_map = display_meeting_list()
                             except ValueError as e:
                                 print(f"❌ {e}")
                         else:
@@ -783,7 +902,7 @@ class StripeCalendarInvoicer:
                                     if self.set_customer_hourly_rate(customer_id, rate):
                                         print(f"✓ Updated hourly rate for {customer_email}: ${rate}/hour")
                                         # Refresh display after change
-                                        meeting_map = display_meeting_list()
+                                        meeting_map, unassociated_map = display_meeting_list()
                                     else:
                                         print(f"❌ Failed to update rate for {customer_email}")
                                     customer_found = True
@@ -800,6 +919,107 @@ class StripeCalendarInvoicer:
                 except (ValueError, IndexError):
                     print("❌ Usage: setrate [customer_email] [rate]")
                     print("Example: setrate john@company.com 250")
+            elif command.upper().startswith('U') and command[1:].isdigit():
+                # Toggle unassociated meeting selection
+                unassoc_idx = command.upper()
+                if unassoc_idx in unassociated_map:
+                    meeting_idx = unassociated_map[unassoc_idx]
+                    meeting = unassociated_meetings[meeting_idx]
+                    
+                    # Can only select if assigned to a customer
+                    if meeting.get('assigned_customer'):
+                        meeting['selected'] = not meeting['selected']
+                        action = "Selected" if meeting['selected'] else "Deselected"
+                        print(f"✓ {action} unassociated meeting {unassoc_idx}")
+                    else:
+                        print(f"❌ Cannot select meeting {unassoc_idx} - must assign to customer first")
+                    
+                    # Refresh display after change
+                    meeting_map, unassociated_map = display_meeting_list()
+                else:
+                    print(f"❌ Invalid unassociated meeting number: {unassoc_idx}")
+            elif command.startswith('assign '):
+                # Assign unassociated meeting to customer
+                try:
+                    parts = command.split()
+                    if len(parts) >= 3:
+                        unassoc_idx = parts[1].upper()
+                        customer_email = parts[2].lower()
+                        
+                        if unassoc_idx in unassociated_map:
+                            meeting_idx = unassociated_map[unassoc_idx]
+                            meeting = unassociated_meetings[meeting_idx]
+                            
+                            # Find customer by email
+                            customer_found = None
+                            for cust in all_customers:
+                                if cust['email'].lower() == customer_email:
+                                    customer_found = cust
+                                    break
+                            
+                            if customer_found:
+                                # Assign the meeting
+                                meeting['assigned_customer'] = customer_found
+                                meeting['is_manually_assigned'] = True
+                                
+                                # Move meeting to customer's meeting list
+                                customer_id = customer_found['id']
+                                if customer_id not in customers_with_meetings:
+                                    customers_with_meetings[customer_id] = {
+                                        'customer': customer_found,
+                                        'meetings': []
+                                    }
+                                
+                                # Create proper meeting structure for customer
+                                customer_meeting = {
+                                    'id': meeting['id'],
+                                    'summary': meeting['summary'],
+                                    'date': meeting['date'],
+                                    'time': meeting['time'],
+                                    'duration': meeting['duration'],
+                                    'start_time': meeting['start_time'],
+                                    'end_time': meeting['end_time'],
+                                    'invoice_status': 'not_invoiced',
+                                    'selected': True,  # Auto-select assigned meetings
+                                    'synopsis': meeting['synopsis'],
+                                    'edited_start_time': None,
+                                    'edited_duration': None,
+                                    'custom_rate': None,
+                                    'is_edited': False,
+                                    'detection_source': 'manual_assignment',
+                                    'is_manually_assigned': True
+                                }
+                                customers_with_meetings[customer_id]['meetings'].append(customer_meeting)
+                                
+                                print(f"✅ Assigned '{meeting['summary']}' to {customer_found['name']} ({customer_email})")
+                                
+                                # Refresh display
+                                meeting_map, unassociated_map = display_meeting_list()
+                            else:
+                                print(f"❌ Customer not found: {customer_email}")
+                                print("Use 'search' command to find customers")
+                        else:
+                            print(f"❌ Invalid unassociated meeting: {unassoc_idx}")
+                    else:
+                        print("❌ Usage: assign U[number] [customer_email]")
+                        print("Example: assign U1 john@company.com")
+                except (ValueError, IndexError):
+                    print("❌ Usage: assign U[number] [customer_email]")
+                    print("Example: assign U1 john@company.com")
+            elif command.startswith('search '):
+                # Search for customers
+                query = command[7:].strip()
+                if query and all_customers:
+                    matches = self.search_customers(all_customers, query)
+                    if matches:
+                        print(f"\nFound {len(matches)} customer(s):")
+                        for i, customer in enumerate(matches, 1):
+                            print(f"{i}. {customer['name']} ({customer['email']})")
+                    else:
+                        print(f"No customers found matching '{query}'")
+                else:
+                    print("❌ Usage: search [query]")
+                    print("Example: search smith")
             else:
                 print(f"❌ Invalid command: '{command}'")
                 show_commands()
@@ -956,12 +1176,14 @@ class StripeCalendarInvoicer:
             logger.error(f"Error creating invoice for {customer['name']}: {e}")
             return None
     
-    def run_automation(self, default_hourly_rate=250.00):
+    def run_automation(self, default_hourly_rate=250.00, include_all_meetings=False, force_interactive=False):
         """
         Run the complete automation process with interactive selection
         
         Args:
             default_hourly_rate: Default hourly rate for customers without a specific rate set
+            include_all_meetings: If True, show all meetings including unassociated ones
+            force_interactive: If True, enter interactive mode even if no customer meetings found
         """
         logger.info("Starting invoice automation...")
         
@@ -981,14 +1203,27 @@ class StripeCalendarInvoicer:
             return
         
         # Step 3: Find customers who had meetings and get meeting details with invoice status
-        customers_with_meetings = self.find_customers_with_meetings(customers, events)
+        customers_with_meetings, unassociated_meetings = self.find_customers_with_meetings(
+            customers, events, include_all_meetings
+        )
         
-        if not customers_with_meetings:
-            logger.info("No customers with recent meetings found.")
+        # Check if we should enter interactive mode
+        if not customers_with_meetings and not unassociated_meetings and not force_interactive:
+            logger.info("No meetings found.")
             return
+        elif not customers_with_meetings and not force_interactive:
+            logger.info(f"No customers with recent meetings found, but found {len(unassociated_meetings)} unassociated meetings.")
+            if not include_all_meetings:
+                logger.info("Use --include-all-meetings flag to see unassociated meetings.")
+                return
         
         # Step 4: Interactive meeting selection and synopsis entry
-        customers_with_meetings = self.display_meetings_interactive(customers_with_meetings, default_hourly_rate)
+        customers_with_meetings = self.display_meetings_interactive(
+            customers_with_meetings, 
+            default_hourly_rate,
+            unassociated_meetings=unassociated_meetings if include_all_meetings else None,
+            all_customers=customers
+        )
         
         # Step 5: Show confirmation and create invoices
         if not self.show_invoice_confirmation(customers_with_meetings, default_hourly_rate):
@@ -1025,6 +1260,10 @@ def main():
                         help='Number of days back to check for meetings (overrides environment variable)')
     parser.add_argument('--hourly-rate', '-r', type=float,
                         help='Default hourly rate (overrides environment variable)')
+    parser.add_argument('--include-all-meetings', '-a', action='store_true',
+                        help='Include all calendar meetings, not just those with known customers')
+    parser.add_argument('--interactive', '-i', action='store_true',
+                        help='Force interactive mode even if no customer meetings are found')
     
     args = parser.parse_args()
     
@@ -1063,7 +1302,11 @@ def main():
     # invoicer.set_customer_hourly_rate("cus_GHI789", 300.00)  # Enterprise client
     
     # Run the automation with interactive interface
-    invoicer.run_automation(default_hourly_rate=DEFAULT_HOURLY_RATE)
+    invoicer.run_automation(
+        default_hourly_rate=DEFAULT_HOURLY_RATE,
+        include_all_meetings=args.include_all_meetings,
+        force_interactive=args.interactive
+    )
 
 if __name__ == "__main__":
     main()
