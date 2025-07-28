@@ -29,6 +29,7 @@ invoicer.set_customer_hourly_rate("cus_DEF456", 125.00)  # $125/hour for standar
 import stripe
 import os
 import argparse
+import re
 from datetime import datetime, timedelta
 from dateutil import parser
 from google.auth.transport.requests import Request
@@ -268,6 +269,48 @@ class StripeCalendarInvoicer:
             # Otherwise it's a parsing error
             raise ValueError(f"Unable to parse rate: {rate_str}")
     
+    def extract_emails_from_text(self, text):
+        """Extract email addresses from text using regex"""
+        if not text:
+            return set()
+        
+        # Email regex pattern
+        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+        emails = re.findall(email_pattern, text, re.IGNORECASE)
+        
+        # Return lowercase set of unique emails
+        return set(email.lower() for email in emails)
+    
+    def find_customer_mentions_in_text(self, text, customers):
+        """Find customer names mentioned in text along with their emails"""
+        if not text:
+            return set()
+        
+        found_emails = set()
+        text_lower = text.lower()
+        
+        # Check for each customer's name and email in the text
+        for customer in customers:
+            customer_name = customer.get('name', '').lower()
+            customer_email = customer.get('email', '').lower()
+            
+            # Skip if no name
+            if not customer_name or customer_name == 'unknown':
+                continue
+                
+            # Check if both name and email appear close to each other
+            # Look for patterns like "Name email@domain.com" or "email@domain.com (Name)"
+            if customer_name in text_lower and customer_email in text_lower:
+                # Simple proximity check - if both exist in text, consider it a match
+                name_pos = text_lower.find(customer_name)
+                email_pos = text_lower.find(customer_email)
+                
+                # If name and email are within 100 characters of each other
+                if abs(name_pos - email_pos) < 100:
+                    found_emails.add(customer_email)
+        
+        return found_emails
+    
     def get_stripe_customers(self):
         """Fetch all customers from Stripe with email addresses"""
         logger.info("Fetching Stripe customers...")
@@ -366,17 +409,37 @@ class StripeCalendarInvoicer:
             
             # Check all attendees and organizer
             participant_emails = set()
+            detection_sources = {}  # Track where each email was found
             
             # Check attendees
             attendees = event.get('attendees', [])
             for attendee in attendees:
                 if attendee.get('email'):
-                    participant_emails.add(attendee['email'].lower())
+                    email = attendee['email'].lower()
+                    participant_emails.add(email)
+                    detection_sources[email] = 'attendee'
             
             # Check organizer
             organizer = event.get('organizer', {})
             if organizer.get('email'):
-                participant_emails.add(organizer['email'].lower())
+                email = organizer['email'].lower()
+                participant_emails.add(email)
+                detection_sources[email] = 'organizer'
+            
+            # Check description for customer emails
+            description = event.get('description', '')
+            if description:
+                # Extract all emails from description
+                description_emails = self.extract_emails_from_text(description)
+                
+                # Also check for customer name mentions
+                name_mention_emails = self.find_customer_mentions_in_text(description, customers)
+                
+                # Add all found emails from description
+                for email in description_emails.union(name_mention_emails):
+                    if email not in participant_emails:  # Only add if not already found
+                        participant_emails.add(email)
+                        detection_sources[email] = 'description'
             
             # Find matching customers
             for email in participant_emails:
@@ -412,7 +475,8 @@ class StripeCalendarInvoicer:
                         'edited_start_time': None,
                         'edited_duration': None,
                         'custom_rate': None,
-                        'is_edited': False
+                        'is_edited': False,
+                        'detection_source': detection_sources.get(email, 'unknown')
                     }
                     customers_with_meetings[customer_id]['meetings'].append(meeting_info)
         
@@ -563,6 +627,8 @@ class StripeCalendarInvoicer:
                         meeting_title += " ✏️"
                     if meeting['custom_rate'] is not None:
                         meeting_title += f" 💰${meeting['custom_rate']}/h"
+                    if meeting.get('detection_source') == 'description':
+                        meeting_title += " 📝"
                     
                     print(f"{meeting_index:2}. {selected_symbol} {status_symbol} {meeting_title}")
                     print(f"    📅 {meeting['date']} at {display_time} ({display_duration}h) - ${amount:.2f}")
@@ -596,6 +662,7 @@ class StripeCalendarInvoicer:
             print("\nIcons:")
             print("  ✏️ = Meeting time/duration edited")
             print("  💰 = Custom rate applied")
+            print("  📝 = Customer found in meeting description")
         
         show_commands()
         

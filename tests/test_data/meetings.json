@@ -101,6 +101,47 @@
         }
       ],
       "description": "Follow-up on action items"
+    },
+    {
+      "id": "cal_007",
+      "summary": "Zoom Strategy Meeting",
+      "start": {
+        "dateTime": "2025-01-19T14:00:00-05:00"
+      },
+      "end": {
+        "dateTime": "2025-01-19T15:00:00-05:00"
+      },
+      "attendees": [],
+      "description": "Bob Smith bob@designstudio.com is inviting you to a scheduled Zoom meeting.\nJoin Zoom Meeting\nhttps://us06web.zoom.us/j/12345678901?pwd=AbCdEfGhIjKlMnOpQrStUvWxYz.1"
+    },
+    {
+      "id": "cal_008",
+      "summary": "Client Presentation",
+      "start": {
+        "dateTime": "2025-01-20T11:00:00-05:00"
+      },
+      "end": {
+        "dateTime": "2025-01-20T12:00:00-05:00"
+      },
+      "attendees": [
+        {
+          "email": "external@client.com",
+          "responseStatus": "accepted"
+        }
+      ],
+      "description": "Presenting to Diana Wilson (diana@enterprise.com) and her team about Q1 deliverables"
+    },
+    {
+      "id": "cal_009",
+      "summary": "Technical Workshop",
+      "start": {
+        "dateTime": "2025-01-21T09:00:00-05:00"
+      },
+      "end": {
+        "dateTime": "2025-01-21T10:30:00-05:00"
+      },
+      "attendees": [],
+      "description": "Workshop attendees: edward@consulting.net, external@partner.com, and team@company.com"
     }
   ]
 }

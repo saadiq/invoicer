@@ -281,5 +281,120 @@ class TestGoogleCalendarIntegration:
         assert len(charlie_data['meetings']) == 1
         assert charlie_data['meetings'][0]['summary'] == 'Quick Check-in'
         assert charlie_data['meetings'][0]['duration'] == 0.5
+    
+    def test_find_customers_with_meetings_description_detection(self, test_invoicer, mocker):
+        """Test finding customers mentioned in meeting descriptions"""
+        # Create test customers
+        customers = [
+            {'id': 'cus_ALICE', 'email': 'alice@techcorp.com', 'name': 'Alice Johnson', 'metadata': {}},
+            {'id': 'cus_BOB', 'email': 'bob@startup.io', 'name': 'Bob Smith', 'metadata': {}},
+            {'id': 'cus_CHARLIE', 'email': 'charlie@enterprise.net', 'name': 'Charlie Davis', 'metadata': {}}
+        ]
+        
+        # Create events with customers in descriptions
+        events = [
+            {
+                'summary': 'Zoom Meeting',
+                'start': {'dateTime': '2025-01-15T10:00:00-05:00'},
+                'end': {'dateTime': '2025-01-15T11:00:00-05:00'},
+                'attendees': [],  # No attendees
+                'description': 'Alice Johnson alice@techcorp.com is inviting you to a scheduled Zoom meeting.\nJoin Zoom Meeting\nhttps://us06web.zoom.us/j/83340401345'
+            },
+            {
+                'summary': 'Project Discussion',
+                'start': {'dateTime': '2025-01-16T14:00:00-05:00'},
+                'end': {'dateTime': '2025-01-16T15:30:00-05:00'},
+                'attendees': [{'email': 'someone@other.com'}],  # Different attendee
+                'description': 'Meeting with Bob Smith (bob@startup.io) to discuss project timeline'
+            },
+            {
+                'summary': 'Team Meeting',
+                'start': {'dateTime': '2025-01-17T09:00:00-05:00'},
+                'end': {'dateTime': '2025-01-17T10:00:00-05:00'},
+                'attendees': [],
+                'description': 'Attendees: charlie@enterprise.net, external@partner.com'  # Email only
+            }
+        ]
+        
+        # Mock invoice status check
+        mocker.patch.object(test_invoicer, 'check_meeting_invoice_status', return_value='not_invoiced')
+        
+        # Find customers with meetings
+        result = test_invoicer.find_customers_with_meetings(customers, events)
+        
+        # Verify all customers were found via descriptions
+        assert len(result) == 3
+        
+        # Check Alice (found via name + email in Zoom format)
+        alice_data = result['cus_ALICE']
+        assert len(alice_data['meetings']) == 1
+        assert alice_data['meetings'][0]['summary'] == 'Zoom Meeting'
+        assert alice_data['meetings'][0]['detection_source'] == 'description'
+        
+        # Check Bob (found via name + email in parentheses)
+        bob_data = result['cus_BOB']
+        assert len(bob_data['meetings']) == 1
+        assert bob_data['meetings'][0]['summary'] == 'Project Discussion'
+        assert bob_data['meetings'][0]['detection_source'] == 'description'
+        
+        # Check Charlie (found via email only)
+        charlie_data = result['cus_CHARLIE']
+        assert len(charlie_data['meetings']) == 1
+        assert charlie_data['meetings'][0]['summary'] == 'Team Meeting'
+        assert charlie_data['meetings'][0]['detection_source'] == 'description'
+    
+    def test_find_customers_mixed_detection_sources(self, test_invoicer, mocker):
+        """Test finding customers via both attendees and descriptions"""
+        customers = [
+            {'id': 'cus_ALICE', 'email': 'alice@techcorp.com', 'name': 'Alice Johnson', 'metadata': {}},
+            {'id': 'cus_BOB', 'email': 'bob@startup.io', 'name': 'Bob Smith', 'metadata': {}}
+        ]
+        
+        events = [
+            {
+                'summary': 'Mixed Meeting',
+                'start': {'dateTime': '2025-01-15T10:00:00-05:00'},
+                'end': {'dateTime': '2025-01-15T11:00:00-05:00'},
+                'attendees': [{'email': 'alice@techcorp.com'}],  # Alice as attendee
+                'description': 'Also includes Bob Smith (bob@startup.io) as a participant'  # Bob in description
+            }
+        ]
+        
+        mocker.patch.object(test_invoicer, 'check_meeting_invoice_status', return_value='not_invoiced')
+        
+        result = test_invoicer.find_customers_with_meetings(customers, events)
+        
+        # Both customers should be found
+        assert len(result) == 2
+        
+        # Alice found as attendee
+        assert result['cus_ALICE']['meetings'][0]['detection_source'] == 'attendee'
+        
+        # Bob found in description
+        assert result['cus_BOB']['meetings'][0]['detection_source'] == 'description'
+    
+    def test_find_customers_no_description_fallback(self, test_invoicer, mocker):
+        """Test that meetings without descriptions still work"""
+        customers = [
+            {'id': 'cus_ALICE', 'email': 'alice@techcorp.com', 'name': 'Alice Johnson', 'metadata': {}}
+        ]
+        
+        events = [
+            {
+                'summary': 'No Description Meeting',
+                'start': {'dateTime': '2025-01-15T10:00:00-05:00'},
+                'end': {'dateTime': '2025-01-15T11:00:00-05:00'},
+                'attendees': [{'email': 'alice@techcorp.com'}]
+                # No description field
+            }
+        ]
+        
+        mocker.patch.object(test_invoicer, 'check_meeting_invoice_status', return_value='not_invoiced')
+        
+        result = test_invoicer.find_customers_with_meetings(customers, events)
+        
+        # Should still find Alice as attendee
+        assert len(result) == 1
+        assert result['cus_ALICE']['meetings'][0]['detection_source'] == 'attendee'
 
 

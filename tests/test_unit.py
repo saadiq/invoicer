@@ -578,3 +578,115 @@ class TestAuthenticationLogic:
         assert result is None
 
 
+class TestDescriptionParsing:
+    """Test email extraction and customer detection from meeting descriptions"""
+    
+    def test_extract_emails_from_text_valid_emails(self, test_invoicer):
+        """Test extracting valid email addresses from text"""
+        # Test single email
+        text = "Meeting with john@example.com about project"
+        emails = test_invoicer.extract_emails_from_text(text)
+        assert emails == {'john@example.com'}
+        
+        # Test multiple emails
+        text = "Attendees: alice@company.com, bob@startup.io, charlie@enterprise.net"
+        emails = test_invoicer.extract_emails_from_text(text)
+        assert emails == {'alice@company.com', 'bob@startup.io', 'charlie@enterprise.net'}
+        
+        # Test Zoom meeting format
+        text = """Jahmal jahmal.lake@ourkidsreadinc.org is inviting you to a scheduled Zoom meeting.
+        Join Zoom Meeting
+        https://us06web.zoom.us/j/83340401345?pwd=Gkge53pWb2tnc7RCU9HfYLxiGfmxIX.1&from=addon"""
+        emails = test_invoicer.extract_emails_from_text(text)
+        assert emails == {'jahmal.lake@ourkidsreadinc.org'}
+        
+        # Test mixed case emails
+        text = "Contact: John.Doe@Example.COM or JANE@COMPANY.ORG"
+        emails = test_invoicer.extract_emails_from_text(text)
+        assert emails == {'john.doe@example.com', 'jane@company.org'}
+    
+    def test_extract_emails_from_text_edge_cases(self, test_invoicer):
+        """Test email extraction edge cases"""
+        # Empty text
+        assert test_invoicer.extract_emails_from_text("") == set()
+        assert test_invoicer.extract_emails_from_text(None) == set()
+        assert test_invoicer.extract_emails_from_text("   ") == set()
+        
+        # No emails in text
+        text = "This is a meeting about quarterly planning"
+        assert test_invoicer.extract_emails_from_text(text) == set()
+        
+        # Emails with special characters
+        text = "Contact: user+tag@example.com, first.last@sub.domain.com"
+        emails = test_invoicer.extract_emails_from_text(text)
+        assert emails == {'user+tag@example.com', 'first.last@sub.domain.com'}
+        
+        # Duplicate emails
+        text = "john@example.com and John@Example.com are the same"
+        emails = test_invoicer.extract_emails_from_text(text)
+        assert emails == {'john@example.com'}
+    
+    def test_find_customer_mentions_in_text(self, test_invoicer):
+        """Test finding customer mentions by name and email"""
+        customers = [
+            {'email': 'alice@techcorp.com', 'name': 'Alice Johnson'},
+            {'email': 'bob@designstudio.com', 'name': 'Bob Smith'},
+            {'email': 'charlie@startup.io', 'name': 'Charlie Davis'},
+            {'email': 'unknown@example.com', 'name': 'Unknown'},  # Should be skipped
+        ]
+        
+        # Test name and email close together
+        text = "Alice Johnson alice@techcorp.com is joining the meeting"
+        found = test_invoicer.find_customer_mentions_in_text(text, customers)
+        assert found == {'alice@techcorp.com'}
+        
+        # Test multiple customers
+        text = """Meeting attendees:
+        - Bob Smith (bob@designstudio.com)
+        - Charlie Davis - charlie@startup.io
+        """
+        found = test_invoicer.find_customer_mentions_in_text(text, customers)
+        assert found == {'bob@designstudio.com', 'charlie@startup.io'}
+        
+        # Test case insensitive matching
+        text = "ALICE JOHNSON from alice@techcorp.com will present"
+        found = test_invoicer.find_customer_mentions_in_text(text, customers)
+        assert found == {'alice@techcorp.com'}
+        
+        # Test name and email far apart (>100 chars)
+        text = "Alice Johnson" + " " * 110 + "alice@techcorp.com"
+        found = test_invoicer.find_customer_mentions_in_text(text, customers)
+        assert found == set()  # Too far apart
+        
+        # Test unknown customer name (should be skipped)
+        text = "Unknown unknown@example.com is attending"
+        found = test_invoicer.find_customer_mentions_in_text(text, customers)
+        assert found == set()
+    
+    def test_find_customer_mentions_edge_cases(self, test_invoicer):
+        """Test edge cases for customer mention detection"""
+        customers = [
+            {'email': 'alice@techcorp.com', 'name': 'Alice Johnson'},
+            {'email': 'no-name@example.com', 'name': ''},  # Empty name
+        ]
+        
+        # Empty text
+        assert test_invoicer.find_customer_mentions_in_text("", customers) == set()
+        assert test_invoicer.find_customer_mentions_in_text(None, customers) == set()
+        
+        # Customer with empty name
+        text = "Meeting with no-name@example.com"
+        found = test_invoicer.find_customer_mentions_in_text(text, customers)
+        assert found == set()  # Should not find customers without names
+        
+        # Only email without name
+        text = "alice@techcorp.com will attend"
+        found = test_invoicer.find_customer_mentions_in_text(text, customers)
+        assert found == set()  # Requires both name and email
+        
+        # Only name without email
+        text = "Alice Johnson will attend"
+        found = test_invoicer.find_customer_mentions_in_text(text, customers)
+        assert found == set()  # Requires both name and email
+
+
